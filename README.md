@@ -21,9 +21,30 @@ see `docs/SETUP.md` for the full architecture writeup and setup steps, since get
 
 core pipeline is built and working (leap_client -> gesture_interpreter -> coord_mapper -> mouse_control). there's also a menu bar GUI now for running it without a terminal.
 
+## running it
+
+symlink the launcher onto your PATH once:
+
+```
+ln -sf "$PWD/bin/orvix" /usr/local/bin/orvix
+```
+
+then from anywhere:
+
+```
+orvix              # menu bar app
+orvix cli          # cli instead, takes any main.py flag (--dry-run, --verbose)
+orvix calibrate    # terminal calibration flow
+orvix status       # check leapd + device + config, launches nothing
+```
+
+`orvix` doesn't start leapd, and doesn't need to: leapd installs as a LaunchDaemon with `KeepAlive=true`, so launchd already keeps it alive at boot. the launcher just checks it's up and tells you how to kick it if it isn't.
+
+whichever terminal you launch from needs Accessibility + Input Monitoring, since macOS ties that permission to the launching app and silently drops the events (no error) if it's missing.
+
 ## gui
 
-`python -m orvix.gui` puts an orvix icon in your menu bar. from there you can:
+`orvix` puts an icon in your menu bar. from there you can:
 
 - start/stop the live pipeline
 - toggle dry-run (logs intended actions instead of moving the real cursor)
