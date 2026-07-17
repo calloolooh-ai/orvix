@@ -24,8 +24,8 @@ import Quartz
 from orvix import calibration
 from orvix.config import Settings, load_config
 from orvix.gesture_interpreter import GestureEvent, GestureInterpreter, GestureType
-from orvix.coord_mapper import CoordMapper
-from orvix.leap_client import LeapConnectionError, pick_hand, stream_frames
+from orvix.coord_mapper import Mapper, make_mapper
+from orvix.leap_client import LeapConnectionError, pick_hand, stream_latest_frames
 from orvix.mouse_control import DryRunMouseController, MouseController, QuartzMouseController
 
 logger = logging.getLogger("orvix.main")
@@ -53,7 +53,7 @@ def _get_screen_size() -> tuple[int, int]:
 
 def _dispatch(
     event: GestureEvent,
-    mapper: CoordMapper,
+    mapper: Mapper,
     mouse: MouseController,
     settings: Settings,
 ) -> None:
@@ -66,7 +66,11 @@ def _dispatch(
 
     if event.type == GestureType.HAND_LOST:
         # nothing to move, freeze the cursor right where it is rather than
-        # letting a stale/garbage position jump it somewhere weird
+        # letting a stale/garbage position jump it somewhere weird.
+        # tell the mapper too: in relative mode it has to drop its anchor,
+        # or when your hand reappears it'd apply the whole distance your
+        # hand travelled while out of view as one jump.
+        mapper.reset()
         return
 
     if event.palm_position is None:
@@ -121,15 +125,18 @@ async def run_live(
     screen_width, screen_height = _get_screen_size()
     logger.info("screen size: %dx%d", screen_width, screen_height)
 
-    mapper = CoordMapper(settings.calibration, screen_width, screen_height, settings)
+    mapper = make_mapper(settings, screen_width, screen_height)
     interpreter = GestureInterpreter(settings)
     mouse: MouseController = DryRunMouseController() if dry_run else QuartzMouseController()
 
+    logger.info("cursor mode: %s", settings.cursor_mode)
     if dry_run:
         logger.info("running in --dry-run mode, not touching the real cursor")
 
     try:
-        async for frame in stream_frames():
+        # latest-frame-wins: if a CGEventPost stall puts us behind, skip the
+        # frames that piled up rather than replaying stale hand positions
+        async for frame in stream_latest_frames():
             hand = pick_hand(frame, settings.preferred_hand)
             events = interpreter.process_hand(hand)
 

@@ -42,13 +42,22 @@ class QuartzMouseController:
         # kCGEventLeftMouseDragged, dragging needs the latter or macOS
         # won't treat it as a drag
         self._button_down = False
+        # last pixel we actually posted, so we can skip no-op moves. every
+        # post is a round trip to the window server and those can stall for
+        # a few hundred ms under load, so the cheapest post is the one we
+        # never make. a still hand at 75fps would otherwise fire ~75
+        # identical events a second for no reason.
+        self._last_pos: tuple[int, int] | None = None
 
     def move(self, x: int, y: int) -> None:
+        if self._last_pos == (x, y):
+            return
         event_type = Quartz.kCGEventLeftMouseDragged if self._button_down else Quartz.kCGEventMouseMoved
         event = Quartz.CGEventCreateMouseEvent(
             None, event_type, (x, y), Quartz.kCGMouseButtonLeft
         )
         Quartz.CGEventPost(Quartz.kCGHIDEventTap, event)
+        self._last_pos = (x, y)
 
     def mouse_down(self) -> None:
         pos = Quartz.CGEventGetLocation(Quartz.CGEventCreate(None))
@@ -57,6 +66,9 @@ class QuartzMouseController:
         )
         Quartz.CGEventPost(Quartz.kCGHIDEventTap, event)
         self._button_down = True
+        # the next move has to go out even if it's the same pixel, since it
+        # changes from a plain move to a drag event and macOS needs to see it
+        self._last_pos = None
 
     def mouse_up(self) -> None:
         pos = Quartz.CGEventGetLocation(Quartz.CGEventCreate(None))
@@ -65,14 +77,19 @@ class QuartzMouseController:
         )
         Quartz.CGEventPost(Quartz.kCGHIDEventTap, event)
         self._button_down = False
+        # same reason as mouse_down: drag -> plain move is a real change
+        self._last_pos = None
 
     def drag_to(self, x: int, y: int) -> None:
         # same as move() while a button is down, kept as a separate method
         # so callers (gesture dispatch in main.py) can express intent clearly
+        if self._last_pos == (x, y):
+            return
         event = Quartz.CGEventCreateMouseEvent(
             None, Quartz.kCGEventLeftMouseDragged, (x, y), Quartz.kCGMouseButtonLeft
         )
         Quartz.CGEventPost(Quartz.kCGHIDEventTap, event)
+        self._last_pos = (x, y)
 
     def scroll(self, dx: int, dy: int) -> None:
         # unit "line" scrolling, two wheel count args = vertical, horizontal.

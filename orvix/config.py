@@ -24,20 +24,29 @@ DEFAULT_CONFIG_PATH = Path.home() / ".orvix" / "config.yaml"
 @dataclasses.dataclass
 class CalibrationBox:
     """
-    the Leap-space (millimeter) box that maps to your full screen.
+    the Leap-space (millimeter) box that maps to your full screen, in
+    absolute cursor mode. ignored entirely in relative mode.
 
-    these are rough factory defaults, a comfortable hand range above the
-    sensor for someone sitting at a desk. run `python -m orvix.calibration`
-    to replace these with numbers measured from your actual hand/desk setup,
-    it'll make tracking feel a lot less janky.
+    these defaults are a guess at where a hand sits above a desk, and a
+    guess is all they can be, since it depends on your chair, desk height
+    and where you put the sensor. `orvix calibrate` measures your actual
+    reach and is still worth doing, but the defaults should at least be
+    usable without it.
+
+    the old defaults (x +-120, y 100-300) were basically the Leap SDK's
+    stock InteractionBox, and they were noticeably too low: measured on a
+    real person, a hand at rest sits around y=300 and sweeps up past 470,
+    so nearly everything clamped to the top edge of the screen and the
+    cursor pinned there. these are shifted up and widened to match hands
+    where they actually are.
     """
 
-    x_min: float = -120.0
-    x_max: float = 120.0
+    x_min: float = -150.0
+    x_max: float = 150.0
     # leap's y axis is height above the device, not screen-style top-to-bottom,
     # so a bigger y means your hand is higher up
-    y_min: float = 100.0
-    y_max: float = 300.0
+    y_min: float = 150.0
+    y_max: float = 400.0
     # z is depth (toward/away from you), we mostly ignore it for 2D cursor
     # mapping right now but keep it around for future gestures (e.g. push to click)
     z_min: float = -80.0
@@ -51,6 +60,33 @@ class Settings:
     # which hand to track when both are visible. "right", "left", or "first"
     # (whichever leapd reports first in the frame, simplest/fastest option)
     preferred_hand: str = "right"
+
+    # how hand movement becomes cursor movement. "absolute" or "relative".
+    #
+    # absolute: where your hand is inside the calibration box IS where the
+    #   cursor is on screen. point at a corner and the cursor is there. needs
+    #   calibration to feel right, and the box is a rectangle while the leap's
+    #   actual field of view is a pyramid, so when your hand is low you can't
+    #   reach the left/right extremes and the screen edges go dead.
+    #
+    # relative: the cursor moves by how far your hand moved, like a trackpad.
+    #   no calibration involved at all (the box is ignored), and no dead edges,
+    #   because nothing depends on absolute position. you lose "point at it and
+    #   the cursor is there", and you can re-centre by pulling your hand out of
+    #   view and bringing it back.
+    cursor_mode: str = "relative"
+
+    # -- relative mode tuning, ignored in absolute mode --
+    #
+    # gain is px of cursor per mm of hand, and it scales with how fast you're
+    # moving, same idea as trackpad acceleration: slow means precise, fast
+    # means you can cross the screen without dragging your arm across the desk.
+    # below relative_slow_speed you get min gain, above relative_fast_speed you
+    # get max gain, linear in between.
+    relative_min_gain: float = 3.0
+    relative_max_gain: float = 18.0
+    relative_slow_speed: float = 50.0  # mm/s
+    relative_fast_speed: float = 600.0  # mm/s
 
     # pinchStrength above this counts as a pinch-click. leapd reports this
     # as a 0-1 float, already computed for us, no need to derive it from
@@ -74,11 +110,23 @@ class Settings:
     pinch_action: str = "click"
     grab_action: str = "scroll"
 
-    # One Euro Filter params, see coord_mapper.py for what these actually do.
-    # these are the values from the original paper's pointer-tracking example,
-    # decent starting point, hand-tune once you're moving a real cursor around
+    # One Euro Filter params, see one_euro_filter.py for the actual math.
+    #
+    # the filter's cutoff is min_cutoff + beta * speed, so min_cutoff governs
+    # how much it smooths a nearly-still hand (jitter control) and beta
+    # governs how fast it stops smoothing once you start moving (lag control).
+    # the paper's tuning procedure is exactly that: set min_cutoff for
+    # acceptable jitter at rest, then raise beta until the lag goes away.
+    #
+    # beta was 0.007 (the paper's own demo value) and that turned out to be
+    # far too low for a cursor. measured from rest, it took ~107ms before the
+    # cursor kept up with a slow deliberate hand movement, which feels like
+    # "slow to start, then it catches up". 0.05 cuts that to ~53ms, at a cost
+    # of about 1px more wobble at rest (3.2 -> 4.2px, which is nothing on a
+    # 3440px wide screen). min_cutoff stays at 1.0 because raising it adds
+    # jitter without helping the start transient.
     one_euro_min_cutoff: float = 1.0
-    one_euro_beta: float = 0.007
+    one_euro_beta: float = 0.05
 
     # how long (seconds) a pinch has to hold before we treat it as a
     # drag-start instead of a plain click, so quick pinch-release taps don't
