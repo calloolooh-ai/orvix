@@ -1,0 +1,21 @@
+# python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+env/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# editor/os junk
+.DS_Store
+.vscode/
+.idea/
+
+# local config overrides, keep the tracked default template only
+orvix_config.local.yaml
+
+# captured leap frame dumps that might be large/binary, keep the curated fixture in tests/fixtures instead
+*.frames.jsonl

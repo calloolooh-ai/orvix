@@ -1,0 +1,14 @@
+# async websocket client, used to talk to the leapd tracking service's
+# json-over-websocket stream at ws://localhost:6437
+websockets>=12.0
+
+# macOS-native mouse/keyboard event posting via CoreGraphics/Quartz.
+# used instead of pyautogui for frame-accurate move/drag/scroll events,
+# see docs/SETUP.md for why
+pyobjc-framework-Quartz>=10.0
+
+# config file loading
+pyyaml>=6.0
+
+# testing
+pytest>=8.0
