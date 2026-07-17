@@ -61,6 +61,16 @@ class Settings:
     # (whichever leapd reports first in the frame, simplest/fastest option)
     preferred_hand: str = "right"
 
+    # ignore the hand when it's closer to the sensor than this (mm above it).
+    # the leap sees through a pyramid that narrows as it approaches the
+    # device, so right down near the surface there's barely any field of view
+    # left and tracking gets erratic: positions jump, fingers get mixed up,
+    # pinch strength flickers. xleapmouse has a cutoff for the same reason.
+    # treating it as "no hand" is better than acting on garbage, and it gives
+    # you a deliberate way to park: drop your hand to the desk and the cursor
+    # stops dead. 0 disables it.
+    min_hand_height_mm: float = 60.0
+
     # how hand movement becomes cursor movement. "absolute" or "relative".
     #
     # absolute: where your hand is inside the calibration box IS where the
@@ -74,6 +84,13 @@ class Settings:
     #   because nothing depends on absolute position. you lose "point at it and
     #   the cursor is there", and you can re-centre by pulling your hand out of
     #   view and bringing it back.
+    #
+    # tilt: hold your hand still and tilt it, the cursor drifts that way like a
+    #   joystick. flat means stop. your hand basically doesn't travel, so it's
+    #   by far the least tiring for long sessions and never runs out of room.
+    #   PyLeapMouse added a tilt mode because they found it "gives exceptionally
+    #   better control than the most obvious point-at-screen method". slowest of
+    #   the three for crossing a big screen.
     cursor_mode: str = "relative"
 
     # -- relative mode tuning, ignored in absolute mode --
@@ -87,6 +104,18 @@ class Settings:
     relative_max_gain: float = 18.0
     relative_slow_speed: float = 50.0  # mm/s
     relative_fast_speed: float = 600.0  # mm/s
+
+    # -- tilt mode tuning, ignored in the other modes --
+    #
+    # how far you have to tilt before the cursor moves at all. leap's palm
+    # normal is never perfectly flat and nobody holds their hand at exactly
+    # 0 degrees, so without a deadzone the cursor creeps constantly.
+    tilt_deadzone: float = 0.15
+    # tilt at/above this (as a fraction of fully sideways) gives max speed.
+    # keeping it well under 1.0 means you never have to tilt uncomfortably far.
+    tilt_full: float = 0.6
+    # cursor speed at full deflection, px/sec
+    tilt_max_speed: float = 1400.0
 
     # pinchStrength above this counts as a pinch-click. leapd reports this
     # as a 0-1 float, already computed for us, no need to derive it from
@@ -112,6 +141,15 @@ class Settings:
     # fingers and the click fires wherever you were pointing when you
     # started. set it to 0 to disable freezing entirely.
     pinch_freeze_threshold: float = 0.3
+
+    # pinch your thumb to your MIDDLE finger instead of your index and you
+    # get a right click. leapd's pinchStrength doesn't say which finger you
+    # pinched with, so we work it out ourselves: whichever fingertip is
+    # closest to the thumb at the moment the pinch registers wins.
+    #
+    # needs the frame to carry pointables. if it doesn't, this quietly does
+    # nothing and every pinch is a left click, which is the old behaviour.
+    right_click_on_middle_finger_pinch: bool = True
 
     grab_threshold: float = 0.85
     grab_release_threshold: float = 0.6

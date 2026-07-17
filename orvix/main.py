@@ -24,8 +24,13 @@ import Quartz
 from orvix import calibration
 from orvix.config import Settings, load_config
 from orvix.gesture_interpreter import GestureEvent, GestureInterpreter, GestureType
-from orvix.coord_mapper import Mapper, make_mapper
-from orvix.leap_client import LeapConnectionError, pick_hand, stream_latest_frames
+from orvix.coord_mapper import Mapper, TiltCoordMapper, make_mapper
+from orvix.leap_client import (
+    LeapConnectionError,
+    fingertips_for_hand,
+    pick_hand,
+    stream_latest_frames,
+)
 from orvix.mouse_control import DryRunMouseController, MouseController, QuartzMouseController
 
 logger = logging.getLogger("orvix.main")
@@ -76,10 +81,21 @@ def _dispatch(
     if event.palm_position is None:
         return
 
-    x, y = mapper.map_to_screen(event.palm_position, now)
+    # tilt mode steers off the angle of your hand, not where it is, so it
+    # needs the palm normal rather than the palm position
+    if isinstance(mapper, TiltCoordMapper) and event.palm_normal is not None:
+        x, y = mapper.map_to_screen_tilt(event.palm_normal, now)
+    else:
+        x, y = mapper.map_to_screen(event.palm_position, now)
 
     if event.type == GestureType.POINT_MOVE:
         mouse.move(x, y)
+        return
+
+    if event.type == GestureType.RIGHT_CLICK:
+        # no move() first, same reasoning as the left click: the cursor was
+        # frozen while your fingers closed and it's already on target
+        mouse.right_click()
         return
 
     family, phase = _GESTURE_FAMILY[event.type]
@@ -143,7 +159,11 @@ async def run_live(
         # frames that piled up rather than replaying stale hand positions
         async for frame in stream_latest_frames():
             hand = pick_hand(frame, settings.preferred_hand)
-            events = interpreter.process_hand(hand)
+            # fingertips are only needed to tell an index pinch from a middle
+            # one for right clicks, so don't bother digging them out if the
+            # hand's gone
+            fingertips = fingertips_for_hand(frame, hand) if hand is not None else None
+            events = interpreter.process_hand(hand, fingertips)
 
             for event in events:
                 if verbose:

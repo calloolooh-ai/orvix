@@ -31,6 +31,7 @@ class MouseController(Protocol):
     def mouse_up(self) -> None: ...
     def drag_to(self, x: int, y: int) -> None: ...
     def scroll(self, dx: int, dy: int) -> None: ...
+    def right_click(self) -> None: ...
 
 
 class QuartzMouseController:
@@ -99,6 +100,19 @@ class QuartzMouseController:
         )
         Quartz.CGEventPost(Quartz.kCGHIDEventTap, event)
 
+    def right_click(self) -> None:
+        """
+        full press+release at the current position. one gesture is one
+        click, there's no right-drag, so there's no reason to make callers
+        track a down/up pair.
+        """
+        pos = Quartz.CGEventGetLocation(Quartz.CGEventCreate(None))
+        for kind in (Quartz.kCGEventRightMouseDown, Quartz.kCGEventRightMouseUp):
+            event = Quartz.CGEventCreateMouseEvent(
+                None, kind, (pos.x, pos.y), Quartz.kCGMouseButtonRight
+            )
+            Quartz.CGEventPost(Quartz.kCGHIDEventTap, event)
+
 
 class DryRunMouseController:
     """logs intended mouse actions instead of touching the real cursor, for --dry-run."""
@@ -117,3 +131,6 @@ class DryRunMouseController:
 
     def scroll(self, dx: int, dy: int) -> None:
         logger.info("[dry-run] scroll (%d, %d)", dx, dy)
+
+    def right_click(self) -> None:
+        logger.info("[dry-run] right click")

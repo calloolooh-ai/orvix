@@ -2,14 +2,23 @@
 
 control your mac's mouse with hand gestures using an og Leap Motion Controller (LM-010). no keyboard or trackpad needed, just your hand in the air above the sensor.
 
-## what it does (v1)
+## what it does
 
 - move the cursor by moving your hand
-- pinch to click
-- pinch and move to drag
-- grab to scroll
+- pinch (thumb + index) to click, hold past 0.3s and it becomes a drag
+- pinch thumb + **middle** finger for a right click
+- grab (make a fist) to scroll
+- drop your hand near the sensor to park: tracking down there is junk anyway, so it's treated as no hand and the cursor stops dead
 
-that's it for now. no custom gesture macros or media key stuff yet, that's future work.
+the cursor freezes the moment you start closing your fingers, so the click lands where you aimed instead of sliding off as your palm shifts. that drift is the classic hand-tracking-cursor problem and most projects never fix it.
+
+### cursor modes
+
+set `cursor_mode` in `~/.orvix/config.yaml`:
+
+- **relative** (default): trackpad style. cursor moves by however far your hand moved, speed scales with how fast you move. no calibration needed at all, no dead edges. pull your hand away and back to re-centre.
+- **tilt**: joystick style. hold your hand still and tilt it, cursor drifts that way, flat means stop. easily the least tiring and can't run out of room, but slowest across a big screen.
+- **absolute**: your hand's position in the calibration box *is* the cursor position. point at a corner, cursor's there. needs `orvix calibrate` to feel right, and the leap's field of view is a pyramid while the box is a rectangle, so the screen edges go dead when your hand is low.
 
 ## how it works
 

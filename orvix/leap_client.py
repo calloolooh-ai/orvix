@@ -165,6 +165,32 @@ async def stream_latest_frames(url: str = LEAP_WS_URL) -> AsyncIterator[dict]:
         task.cancel()
 
 
+def fingertips_for_hand(frame: dict, hand: dict) -> dict[int, tuple[float, float, float]]:
+    """
+    map finger type -> tip position, for one hand.
+
+    leapd reports fingers in a top-level "pointables" list rather than
+    nested inside the hand, so they're matched back up by handId. finger
+    types are the SDK's: 0 thumb, 1 index, 2 middle, 3 ring, 4 pinky.
+
+    returns {} when the frame carries no pointables, which callers must
+    cope with: whether pointables are present depends on the protocol
+    version leapd negotiated, and we don't want a missing key to take out
+    cursor movement, which needs none of this.
+    """
+    hand_id = hand.get("id")
+    tips: dict[int, tuple[float, float, float]] = {}
+    for p in frame.get("pointables", []):
+        if p.get("handId") != hand_id:
+            continue
+        tip = p.get("tipPosition")
+        finger_type = p.get("type")
+        if tip is None or finger_type is None:
+            continue
+        tips[finger_type] = tuple(tip)
+    return tips
+
+
 def pick_hand(frame: dict, preferred_hand: str) -> dict | None:
     """
     pull the hand we care about out of a frame dict, or None if it's not
