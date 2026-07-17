@@ -82,8 +82,12 @@ class Settings:
 
     # how long (seconds) a pinch has to hold before we treat it as a
     # drag-start instead of a plain click, so quick pinch-release taps don't
-    # accidentally start a drag
-    drag_hold_seconds: float = 0.15
+    # accidentally start a drag.
+    # was 0.15 originally, but testing on real hardware showed that's way too
+    # tight to actually land a click: a 15s session logged 568 drag frames
+    # against only 6 pinches, i.e. nearly every pinch ran long and turned into
+    # a drag. 0.3 leaves enough room for a deliberate tap.
+    drag_hold_seconds: float = 0.3
 
     target_fps: int = 100
 
