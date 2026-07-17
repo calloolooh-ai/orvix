@@ -29,19 +29,27 @@ import rumps
 from Foundation import NSObject
 
 from orvix import calibration
-from orvix.config import CalibrationBox, Settings, load_config, save_config
+from orvix.config import Settings, load_config, save_config
 from orvix.gesture_interpreter import GestureEvent
-from orvix.leap_client import LeapConnectionError, pick_hand, stream_frames
+from orvix.leap_client import LeapConnectionError
 from orvix.main import run_live
 
 logger = logging.getLogger("orvix.gui")
 
 ICON_IDLE = "✋"  # raised hand
 ICON_RUNNING = "\U0001f7e2"  # green circle
+ICON_CALIBRATING = "\U0001f7e1"  # yellow circle
 ICON_ERROR = "❌"  # cross mark
 
 ACTION_CHOICES = ["click", "scroll", "disabled"]
 ACTION_LABELS = {"click": "Click / Drag", "scroll": "Scroll", "disabled": "Disabled"}
+
+CURSOR_MODES = ["relative", "tilt", "absolute"]
+CURSOR_MODE_LABELS = {
+    "relative": "Relative (trackpad)",
+    "tilt": "Tilt (joystick)",
+    "absolute": "Absolute (point at it)",
+}
 
 
 class _MainThreadInvoker(NSObject):
@@ -89,11 +97,16 @@ class PipelineWorker:
         )
         self._thread.start()
 
-    def stop(self) -> None:
+    def stop(self, wait: bool = False) -> None:
         if not self.running or self._loop is None or self._task is None:
             return
         loop, task = self._loop, self._task
         loop.call_soon_threadsafe(task.cancel)
+        if wait and self._thread is not None:
+            # for restarts: the old thread has to actually be gone before we
+            # start a new one, or two pipelines briefly both drive the cursor.
+            # the timeout is so a wedged thread can't freeze the menu bar.
+            self._thread.join(timeout=2.0)
 
     def _run_thread(self, settings: Settings, dry_run: bool) -> None:
         loop = asyncio.new_event_loop()
@@ -115,10 +128,33 @@ class PipelineWorker:
             logger.exception("live pipeline crashed")
             self._on_error(str(exc))
         finally:
-            loop.close()
+            self._shutdown_loop(loop)
             self._loop = None
             self._task = None
             self._on_status("stopped")
+
+    @staticmethod
+    def _shutdown_loop(loop: asyncio.AbstractEventLoop) -> None:
+        """
+        let everything unwind before closing the loop.
+
+        cancelling the pipeline task leaves others still alive underneath it
+        (the frame reader, the leapd heartbeat, websockets' own keepalive).
+        closing the loop out from under them logs "Task was destroyed but it
+        is pending" and, worse, skips the cleanup that closes the websocket,
+        so every stop/start leaked a connection to leapd.
+        """
+        try:
+            pending = [t for t in asyncio.all_tasks(loop) if not t.done()]
+            for task in pending:
+                task.cancel()
+            if pending:
+                loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+            loop.run_until_complete(loop.shutdown_asyncgens())
+        except Exception:  # noqa: BLE001 - a messy teardown must not take the app down
+            logger.debug("pipeline loop teardown was not clean", exc_info=True)
+        finally:
+            loop.close()
 
 
 class OrvixApp(rumps.App):
@@ -142,6 +178,13 @@ class OrvixApp(rumps.App):
             self.grab_menu.add(
                 rumps.MenuItem(ACTION_LABELS[action], callback=self._make_action_setter("grab", action))
             )
+
+        self.mode_menu = rumps.MenuItem("Cursor mode...")
+        for mode in CURSOR_MODES:
+            self.mode_menu.add(
+                rumps.MenuItem(CURSOR_MODE_LABELS[mode], callback=self._make_mode_setter(mode))
+            )
+
         self._refresh_action_checkmarks()
 
         self.menu = [
@@ -151,6 +194,7 @@ class OrvixApp(rumps.App):
             self.start_stop_item,
             self.dry_run,
             None,
+            self.mode_menu,
             self.pinch_menu,
             self.grab_menu,
             None,
@@ -169,6 +213,7 @@ class OrvixApp(rumps.App):
         # often we hop to the main thread for a status update so a fast
         # hand doesn't spam Cocoa with selector calls.
         self._last_event_ui_update = 0.0
+        self._last_cal_ui_update = 0.0
         self._event_ui_interval = 0.15
 
     # -- menu callbacks (always invoked on the main thread by rumps) --
@@ -182,6 +227,25 @@ class OrvixApp(rumps.App):
     def _toggle_dry_run(self, sender: rumps.MenuItem) -> None:
         sender.state = not sender.state
         self.dry_run.state = sender.state
+
+    def _make_mode_setter(self, mode: str):
+        def _set(sender: rumps.MenuItem) -> None:
+            if self.settings.cursor_mode == mode:
+                return
+            self.settings.cursor_mode = mode
+            save_config(self.settings)
+            self._refresh_action_checkmarks()
+
+            # the mapper is built when the pipeline starts, so a mode change
+            # means nothing until it restarts. do that here rather than
+            # leaving the menu showing one mode while a different one is
+            # actually driving the cursor.
+            if self.worker.running:
+                dry_run = bool(self.dry_run.state)
+                self.worker.stop(wait=True)
+                self.worker.start(self.settings, dry_run=dry_run)
+
+        return _set
 
     def _make_action_setter(self, family: str, action: str):
         def _set(sender: rumps.MenuItem) -> None:
@@ -199,11 +263,25 @@ class OrvixApp(rumps.App):
             item.state = ACTION_LABELS[self.settings.pinch_action] == item.title
         for item in self.grab_menu.values():
             item.state = ACTION_LABELS[self.settings.grab_action] == item.title
+        for item in self.mode_menu.values():
+            item.state = CURSOR_MODE_LABELS.get(self.settings.cursor_mode) == item.title
 
     def _calibrate(self, sender: rumps.MenuItem) -> None:
         if self.worker.running:
             rumps.alert("orvix", "stop the live pipeline before calibrating.")
             return
+
+        # this alert blocks the main thread until you dismiss it, which is
+        # what we want: the sweep shouldn't start counting down while you're
+        # still reading. the thread starts after you click OK.
+        rumps.alert(
+            "orvix calibration",
+            "this works out your actual reach so the cursor covers your whole screen.\n\n"
+            f"when you click OK, spend {calibration.SWEEP_SECONDS:.0f}s sweeping your hand around "
+            "the whole area you want to use: left to right, high to low, like you're "
+            "wiping a window. keep it over the sensor, palm down.\n\n"
+            "no need to hold still or hit exact spots. watch the menu bar for progress.",
+        )
         threading.Thread(target=self._run_calibration, daemon=True).start()
 
     def _quit(self, sender: rumps.MenuItem) -> None:
@@ -250,50 +328,56 @@ class OrvixApp(rumps.App):
         rumps.alert("orvix", message)
 
     def _run_calibration(self) -> None:
+        """
+        runs on its own thread (calibration blocks on the leap stream for
+        SWEEP_SECONDS, which would freeze the menu bar if it ran on the main
+        thread). drives calibration.calibrate(), same code the cli uses, and
+        just renders the progress differently.
+        """
         try:
-            asyncio.run(_gui_calibrate(self.settings, self._on_main_thread))
-        except LeapConnectionError as exc:
-            self._handle_error(str(exc))
-        else:
-            self.settings = load_config()
-            self._on_main_thread(self._refresh_action_checkmarks)
-            self._on_main_thread(
-                lambda: rumps.alert("orvix", "calibration saved. try Dry Run first to check it feels right.")
+            box = asyncio.run(
+                calibration.calibrate(self.settings, on_progress=self._calibration_progress)
             )
+        except calibration.CalibrationError as exc:
+            self._on_main_thread(self._end_calibration_ui)
+            self._handle_error(str(exc))
+            return
+        except LeapConnectionError as exc:
+            self._on_main_thread(self._end_calibration_ui)
+            self._handle_error(str(exc))
+            return
 
+        self.settings.calibration = box
+        save_config(self.settings)
 
-async def _gui_calibrate(settings: Settings, on_main_thread) -> None:
-    """
-    calibration.py's flow is built around input()/print() for the terminal.
-    this reimplements the same two-point capture using rumps alerts instead
-    of stdin, so calibration works from the menu bar with no terminal open.
-    """
-    done = threading.Event()
-    result: dict = {}
+        self._on_main_thread(self._end_calibration_ui)
+        self._on_main_thread(
+            lambda: rumps.alert(
+                "orvix",
+                "calibration saved.\n\n"
+                f"{calibration.describe_box(box)}\n\n"
+                "tick Dry Run and hit Start to check it feels right before going live.",
+            )
+        )
 
-    def _prompt(prompt: str) -> None:
-        rumps.alert("orvix calibration", prompt)
-        done.set()
+    def _calibration_progress(self, fraction: float, n_samples: int) -> None:
+        # throttled for the same reason gesture events are, this fires per
+        # frame at ~100/sec and the menu only needs to look alive
+        now = time.monotonic()
+        if fraction < 1.0 and now - self._last_cal_ui_update < self._event_ui_interval:
+            return
+        self._last_cal_ui_update = now
+        self._on_main_thread(self._update_calibration_ui, fraction, n_samples)
 
-    async def _capture(prompt: str) -> tuple[float, float, float]:
-        done.clear()
-        on_main_thread(_prompt, prompt)
-        while not done.is_set():
-            await asyncio.sleep(0.05)
-        samples = await calibration._collect_samples(settings.preferred_hand, calibration.SAMPLES_PER_POINT)
-        return calibration._average_point(samples)
+    def _update_calibration_ui(self, fraction: float, n_samples: int) -> None:
+        filled = int(fraction * 10)
+        bar = "#" * filled + "." * (10 - filled)
+        self.status_item.title = f"calibrating: [{bar}] {n_samples} samples"
+        self.title = ICON_CALIBRATING
 
-    top_left = await _capture("move your hand to the TOP-LEFT of your comfortable range, then click OK and hold still.")
-    bottom_right = await _capture("now move your hand to the BOTTOM-RIGHT of your comfortable range, then click OK and hold still.")
-
-    x_min, x_max = min(top_left[0], bottom_right[0]), max(top_left[0], bottom_right[0])
-    y_min, y_max = min(top_left[1], bottom_right[1]), max(top_left[1], bottom_right[1])
-    z_min, z_max = min(top_left[2], bottom_right[2]) - 40, max(top_left[2], bottom_right[2]) + 40
-
-    settings.calibration = CalibrationBox(
-        x_min=x_min, x_max=x_max, y_min=y_min, y_max=y_max, z_min=z_min, z_max=z_max
-    )
-    save_config(settings)
+    def _end_calibration_ui(self) -> None:
+        self.status_item.title = "status: stopped"
+        self.title = ICON_IDLE
 
 
 def main() -> None:

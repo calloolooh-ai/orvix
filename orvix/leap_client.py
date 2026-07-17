@@ -101,6 +101,96 @@ async def stream_frames(url: str = LEAP_WS_URL) -> AsyncIterator[dict]:
         await ws.close()
 
 
+async def stream_latest_frames(url: str = LEAP_WS_URL) -> AsyncIterator[dict]:
+    """
+    like stream_frames, but only ever yields the *newest* frame, dropping
+    any that arrived while you were busy with the last one.
+
+    this exists because of a real measured failure. macOS intermittently
+    stalls CGEventPost for a few hundred ms (347ms observed). frames keep
+    arriving at ~75/sec throughout, so a naive in-order loop comes back
+    from the stall ~26 frames behind and then faithfully replays every one
+    of them. it never catches up, it just keeps rendering stale hand
+    positions, so the cursor trails you by seconds. lag was measured
+    ballooning to 2.7s and staying there.
+
+    for cursor control an old frame is worthless, the only one that matters
+    is where your hand is *now*. so we let the reader run ahead and keep a
+    single slot: if the consumer is slow, older frames get overwritten and
+    quietly dropped. that bounds lag to roughly one stall instead of
+    accumulating it forever.
+    """
+    queue: asyncio.Queue = asyncio.Queue(maxsize=1)
+    sentinel = object()
+    error: BaseException | None = None
+
+    async def reader() -> None:
+        nonlocal error
+        try:
+            async for frame in stream_frames(url):
+                if queue.full():
+                    # drop the frame nobody got to, it's already stale
+                    try:
+                        queue.get_nowait()
+                    except asyncio.QueueEmpty:
+                        pass
+                queue.put_nowait(frame)
+        except (asyncio.CancelledError, GeneratorExit):
+            raise
+        except BaseException as exc:  # noqa: BLE001 - hand it to the consumer to raise
+            error = exc
+        finally:
+            # tell the consumer we're done. this has to *await* rather than
+            # put_nowait: if the last real frame is still sitting unconsumed
+            # the queue is full, and a conditional put_nowait would silently
+            # skip the sentinel and leave the consumer blocked on get()
+            # forever. awaiting parks until the consumer takes that frame.
+            # if the consumer bailed first it cancels us, which lands here
+            # as CancelledError and there's nobody left to notify anyway.
+            try:
+                await queue.put(sentinel)
+            except asyncio.CancelledError:
+                pass
+
+    task = asyncio.create_task(reader())
+    try:
+        while True:
+            item = await queue.get()
+            if item is sentinel:
+                if error is not None:
+                    raise error
+                return
+            yield item
+    finally:
+        task.cancel()
+
+
+def fingertips_for_hand(frame: dict, hand: dict) -> dict[int, tuple[float, float, float]]:
+    """
+    map finger type -> tip position, for one hand.
+
+    leapd reports fingers in a top-level "pointables" list rather than
+    nested inside the hand, so they're matched back up by handId. finger
+    types are the SDK's: 0 thumb, 1 index, 2 middle, 3 ring, 4 pinky.
+
+    returns {} when the frame carries no pointables, which callers must
+    cope with: whether pointables are present depends on the protocol
+    version leapd negotiated, and we don't want a missing key to take out
+    cursor movement, which needs none of this.
+    """
+    hand_id = hand.get("id")
+    tips: dict[int, tuple[float, float, float]] = {}
+    for p in frame.get("pointables", []):
+        if p.get("handId") != hand_id:
+            continue
+        tip = p.get("tipPosition")
+        finger_type = p.get("type")
+        if tip is None or finger_type is None:
+            continue
+        tips[finger_type] = tuple(tip)
+    return tips
+
+
 def pick_hand(frame: dict, preferred_hand: str) -> dict | None:
     """
     pull the hand we care about out of a frame dict, or None if it's not

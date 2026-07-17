@@ -2,14 +2,23 @@
 
 control your mac's mouse with hand gestures using an og Leap Motion Controller (LM-010). no keyboard or trackpad needed, just your hand in the air above the sensor.
 
-## what it does (v1)
+## what it does
 
 - move the cursor by moving your hand
-- pinch to click
-- pinch and move to drag
-- grab to scroll
+- pinch (thumb + index) to click, hold past 0.3s and it becomes a drag
+- pinch thumb + **middle** finger for a right click
+- grab (make a fist) to scroll
+- drop your hand near the sensor to park: tracking down there is junk anyway, so it's treated as no hand and the cursor stops dead
 
-that's it for now. no custom gesture macros or media key stuff yet, that's future work.
+the cursor freezes the moment you start closing your fingers, so the click lands where you aimed instead of sliding off as your palm shifts. that drift is the classic hand-tracking-cursor problem and most projects never fix it.
+
+### cursor modes
+
+set `cursor_mode` in `~/.orvix/config.yaml`:
+
+- **relative** (default): trackpad style. cursor moves by however far your hand moved, speed scales with how fast you move. no calibration needed at all, no dead edges. pull your hand away and back to re-centre.
+- **tilt**: joystick style. hold your hand still and tilt it, cursor drifts that way, flat means stop. easily the least tiring and can't run out of room, but slowest across a big screen.
+- **absolute**: your hand's position in the calibration box *is* the cursor position. point at a corner, cursor's there. needs `orvix calibrate` to feel right, and the leap's field of view is a pyramid while the box is a rectangle, so the screen edges go dead when your hand is low.
 
 ## how it works
 
@@ -21,9 +30,30 @@ see `docs/SETUP.md` for the full architecture writeup and setup steps, since get
 
 core pipeline is built and working (leap_client -> gesture_interpreter -> coord_mapper -> mouse_control). there's also a menu bar GUI now for running it without a terminal.
 
+## running it
+
+symlink the launcher onto your PATH once:
+
+```
+ln -sf "$PWD/bin/orvix" /usr/local/bin/orvix
+```
+
+then from anywhere:
+
+```
+orvix              # menu bar app
+orvix cli          # cli instead, takes any main.py flag (--dry-run, --verbose)
+orvix calibrate    # terminal calibration flow
+orvix status       # check leapd + device + config, launches nothing
+```
+
+`orvix` doesn't start leapd, and doesn't need to: leapd installs as a LaunchDaemon with `KeepAlive=true`, so launchd already keeps it alive at boot. the launcher just checks it's up and tells you how to kick it if it isn't.
+
+whichever terminal you launch from needs Accessibility + Input Monitoring, since macOS ties that permission to the launching app and silently drops the events (no error) if it's missing.
+
 ## gui
 
-`python -m orvix.gui` puts an orvix icon in your menu bar. from there you can:
+`orvix` puts an icon in your menu bar. from there you can:
 
 - start/stop the live pipeline
 - toggle dry-run (logs intended actions instead of moving the real cursor)

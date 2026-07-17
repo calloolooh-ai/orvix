@@ -1,0 +1,118 @@
+#!/bin/bash
+#
+# orvix launcher. put a symlink to this on your PATH and just type `orvix`.
+#
+#   orvix              launch the menu bar app (default)
+#   orvix cli          run the cli live instead of the menu bar
+#   orvix cli --dry-run    ...any main.py flag works after `cli`
+#   orvix calibrate    run the terminal calibration flow
+#   orvix status       check leapd/device/config without launching anything
+#
+# note this deliberately does NOT try to start leapd. leapd is installed as a
+# LaunchDaemon (/Library/LaunchDaemons/com.leapmotion.leapd.plist) with
+# KeepAlive=true, so launchd already starts it at boot and restarts it if it
+# dies. starting it by hand would need a sudo password prompt, which would
+# defeat the point of a one word command. so we just check it's up and say
+# something useful if it isn't.
+
+set -euo pipefail
+
+# resolve the real repo dir even if we got here through a symlink on PATH
+SOURCE="${BASH_SOURCE[0]}"
+while [ -L "$SOURCE" ]; do
+    DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+    SOURCE="$(readlink "$SOURCE")"
+    [[ "$SOURCE" != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+REPO="$(cd -P "$(dirname "$SOURCE")/.." && pwd)"
+
+PYTHON="$REPO/.venv/bin/python"
+
+# the package isn't pip installed into the venv, it's just imported from the
+# repo, so `python -m orvix.gui` only resolves if the repo is importable.
+# without this it works from inside the repo and breaks everywhere else, which
+# is exactly the case that matters for a command on your PATH.
+export PYTHONPATH="$REPO${PYTHONPATH:+:$PYTHONPATH}"
+
+if [ ! -x "$PYTHON" ]; then
+    echo "orvix: no venv at $PYTHON" >&2
+    echo "  set one up with:  cd $REPO && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt" >&2
+    exit 1
+fi
+
+leapd_running() {
+    pgrep -x leapd > /dev/null 2>&1
+}
+
+require_leapd() {
+    if leapd_running; then
+        return 0
+    fi
+    echo "orvix: leapd isn't running, so there's no hand data to read." >&2
+    echo >&2
+    echo "  it's a LaunchDaemon w/ KeepAlive so it should come back on its own." >&2
+    echo "  if it doesn't, kick it:" >&2
+    echo "    sudo launchctl kickstart -k system/com.leapmotion.leapd" >&2
+    echo "  or just open /Applications/Leap\\ Motion.app" >&2
+    exit 1
+}
+
+cmd="${1:-gui}"
+
+case "$cmd" in
+    status)
+        echo -n "leapd:    "
+        if leapd_running; then echo "running"; else echo "NOT running"; fi
+        echo -n "config:   "
+        if [ -f "$HOME/.orvix/config.yaml" ]; then echo "$HOME/.orvix/config.yaml"; else echo "none yet (using defaults, probably wants calibrating)"; fi
+        # a device check needs to actually talk to leapd, so only try it if leapd is up
+        if leapd_running; then
+            echo -n "device:   "
+            "$PYTHON" - <<'PY' 2>/dev/null || echo "couldn't reach leapd on ws://localhost:6437"
+import asyncio, json, websockets
+
+async def probe():
+    try:
+        ws = await asyncio.wait_for(websockets.connect("ws://localhost:6437/v6.json"), timeout=3)
+    except Exception:
+        print("couldn't reach leapd on ws://localhost:6437")
+        return
+    try:
+        for _ in range(20):
+            msg = json.loads(await asyncio.wait_for(ws.recv(), timeout=2))
+            ev = msg.get("event", {})
+            if ev.get("type") == "deviceEvent":
+                st = ev["state"]
+                print(f"{st.get('id')} attached={st.get('attached')} streaming={st.get('streaming')}")
+                return
+        print("connected, but no device event (is the leap plugged in?)")
+    finally:
+        await ws.close()
+
+asyncio.run(probe())
+PY
+        fi
+        ;;
+    calibrate)
+        require_leapd
+        exec "$PYTHON" -m orvix.main --calibrate
+        ;;
+    cli)
+        require_leapd
+        shift
+        exec "$PYTHON" -m orvix.main "$@"
+        ;;
+    gui)
+        require_leapd
+        echo "orvix: starting the menu bar app, look for the hand icon up top."
+        echo "  ctrl+c here (or Quit in the menu) to stop it."
+        exec "$PYTHON" -m orvix.gui
+        ;;
+    -h|--help|help)
+        sed -n '3,9p' "$SOURCE" | sed 's/^# \{0,1\}//'
+        ;;
+    *)
+        echo "orvix: dunno what '$cmd' means. try: orvix [gui|cli|calibrate|status|help]" >&2
+        exit 1
+        ;;
+esac
