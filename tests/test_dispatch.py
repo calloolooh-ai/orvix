@@ -44,8 +44,11 @@ def test_pinch_click_action_is_default():
     _dispatch(GestureEvent(GestureType.PINCH_DRAG, (0.0, 200.0, 0.0)), mapper, mouse, settings)
     _dispatch(GestureEvent(GestureType.PINCH_UP, (0.0, 200.0, 0.0)), mapper, mouse, settings)
 
+    # no "move" before mouse_down on purpose: the interpreter froze the
+    # cursor while the fingers were closing, and moving to the (drifted)
+    # palm position now would throw that away. see pinch_freeze_threshold.
     kinds = [call[0] for call in mouse.calls]
-    assert kinds == ["move", "mouse_down", "drag_to", "mouse_up"]
+    assert kinds == ["mouse_down", "drag_to", "mouse_up"]
 
 
 def test_pinch_remapped_to_scroll_uses_velocity_instead_of_clicking():
@@ -92,7 +95,7 @@ def test_grab_remapped_to_click_uses_start_and_end_as_down_and_up():
     _dispatch(GestureEvent(GestureType.GRAB_END, (0.0, 200.0, 0.0)), mapper, mouse, settings)
 
     kinds = [call[0] for call in mouse.calls]
-    assert kinds == ["move", "mouse_down", "drag_to", "mouse_up"]
+    assert kinds == ["mouse_down", "drag_to", "mouse_up"]
 
 
 def test_hand_lost_and_missing_position_are_ignored():

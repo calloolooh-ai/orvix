@@ -28,8 +28,9 @@ def test_open_hand_emits_point_move():
 def test_pinch_crossing_threshold_emits_pinch_down_once():
     interpreter = GestureInterpreter(Settings())
 
-    # below threshold, nothing happens
-    events = interpreter.process_hand(make_hand(pinch=0.5))
+    # hand open, cursor just tracks. has to be below pinch_freeze_threshold
+    # too, or we'd be holding the cursor still ready for a click
+    events = interpreter.process_hand(make_hand(pinch=0.1))
     assert events[0].type == GestureType.POINT_MOVE
 
     # crosses threshold, pinch down fires
@@ -43,6 +44,46 @@ def test_pinch_crossing_threshold_emits_pinch_down_once():
     events = interpreter.process_hand(make_hand(pinch=0.9))
     assert len(events) == 1
     assert events[0].type == GestureType.POINT_MOVE
+
+
+def test_cursor_freezes_once_you_start_closing_your_fingers():
+    """
+    click stabilisation. closing your fingers tugs your palm sideways, so
+    without this the cursor slides off the target in the moments before the
+    click registers and you miss whatever you were aiming at.
+    """
+    interpreter = GestureInterpreter(Settings())
+
+    # open hand, cursor tracks normally
+    assert interpreter.process_hand(make_hand(x=0.0, pinch=0.0))[0].type == GestureType.POINT_MOVE
+
+    # starting to close: past the freeze threshold but not yet a pinch.
+    # the hand is drifting (x moves) and the cursor must NOT follow.
+    assert interpreter.process_hand(make_hand(x=5.0, pinch=0.4)) == []
+    assert interpreter.process_hand(make_hand(x=12.0, pinch=0.6)) == []
+
+    # completing the pinch still clicks
+    events = interpreter.process_hand(make_hand(x=15.0, pinch=0.9))
+    assert events[0].type == GestureType.PINCH_DOWN
+
+
+def test_freeze_can_be_turned_off():
+    settings = Settings(pinch_freeze_threshold=0.0)
+    interpreter = GestureInterpreter(settings)
+    events = interpreter.process_hand(make_hand(pinch=0.5))
+    assert events[0].type == GestureType.POINT_MOVE
+
+
+def test_freezing_doesnt_block_movement_mid_drag():
+    """mid-drag the pinch is held hard, but you obviously still need to move."""
+    settings = Settings(drag_hold_seconds=0.0)  # go straight to dragging
+    interpreter = GestureInterpreter(settings)
+
+    interpreter.process_hand(make_hand(pinch=0.9))  # PINCH_DOWN
+    interpreter.process_hand(make_hand(pinch=0.9))  # -> DRAGGING
+    events = interpreter.process_hand(make_hand(x=20.0, pinch=0.9))
+
+    assert events[0].type == GestureType.PINCH_DRAG
 
 
 def test_quick_pinch_release_is_a_click_not_a_drag():

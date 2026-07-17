@@ -101,10 +101,24 @@ class GestureInterpreter:
         # only emit a plain cursor-move event if nothing else happened this
         # frame, a pinch/drag event already implies "the hand moved here"
         # for anything downstream mapping position to screen coords
-        if not events:
+        if not events and not self._freezing_for_click(pinch_strength):
             events.append(GestureEvent(GestureType.POINT_MOVE, palm_position))
 
         return events
+
+    def _freezing_for_click(self, pinch_strength: float) -> bool:
+        """
+        true once you've started closing your fingers but before the pinch
+        actually registers. during that window we hold the cursor still, so
+        the small palm drift that closing your hand causes doesn't slide you
+        off whatever you were aiming at. see pinch_freeze_threshold.
+
+        only applies from IDLE: mid-drag you obviously still want to move.
+        """
+        threshold = self._settings.pinch_freeze_threshold
+        if threshold <= 0:
+            return False
+        return self._pinch_state == _PinchState.IDLE and pinch_strength >= threshold
 
     def _handle_pinch(
         self, pinch_strength: float, palm_position: tuple[float, float, float]

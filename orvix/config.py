@@ -97,6 +97,22 @@ class Settings:
     # sitting right at the boundary doesn't rapid-fire click/unclick
     pinch_release_threshold: float = 0.5
 
+    # click stabilisation. as soon as pinch strength crosses this we stop
+    # moving the cursor, so the click lands where you aimed.
+    #
+    # this is THE classic failure of every hand-tracked cursor: closing your
+    # fingers drags your whole palm a little, so the cursor slides off the
+    # target in the moments before the click registers, and you miss. other
+    # projects hit it too and mostly worked around it by hand (one blog's
+    # advice is literally to rest your thumb against your middle finger to
+    # physically brace the drift).
+    #
+    # freezing solves it properly: the arming threshold is well below
+    # pinch_threshold, so the cursor locks while you're still closing your
+    # fingers and the click fires wherever you were pointing when you
+    # started. set it to 0 to disable freezing entirely.
+    pinch_freeze_threshold: float = 0.3
+
     grab_threshold: float = 0.85
     grab_release_threshold: float = 0.6
 

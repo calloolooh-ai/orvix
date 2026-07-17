@@ -90,7 +90,12 @@ def _dispatch(
 
     if action == "click":
         if phase == "start":
-            mouse.move(x, y)
+            # deliberately no move() here. the interpreter has been holding
+            # the cursor still since you started closing your fingers (see
+            # pinch_freeze_threshold), so the cursor is already sitting on
+            # what you aimed at. moving to the palm position now would undo
+            # exactly the drift correction we just did and put the click
+            # wherever your hand slid to.
             mouse.mouse_down()
         elif phase == "continue":
             mouse.drag_to(x, y)
