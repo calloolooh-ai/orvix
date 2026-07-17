@@ -10,5 +10,8 @@ pyobjc-framework-Quartz>=10.0
 # config file loading
 pyyaml>=6.0
 
+# menu bar GUI (orvix/gui.py), wraps Cocoa's NSStatusItem
+rumps>=0.4.0
+
 # testing
 pytest>=8.0
