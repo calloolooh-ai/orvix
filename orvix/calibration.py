@@ -29,6 +29,7 @@ means.
 from __future__ import annotations
 
 import asyncio
+import statistics
 import time
 from collections.abc import Callable
 
@@ -39,6 +40,9 @@ from orvix.leap_client import LeapConnectionError, pick_hand, stream_frames
 # feeling like a chore, and at ~100fps it's still hundreds of samples even
 # if your hand drops out of view for a chunk of it.
 SWEEP_SECONDS = 15.0
+
+# how long to watch a still hand to find where "flat" is, for tilt mode
+NEUTRAL_TILT_SECONDS = 4.0
 
 # fraction to discard off each end of each axis before taking min/max, see
 # the note up top about junk samples at the edge of the sensor cone
@@ -178,6 +182,42 @@ async def collect_range(
     return samples
 
 
+async def collect_neutral_tilt(
+    preferred_hand: str, duration: float = NEUTRAL_TILT_SECONDS
+) -> tuple[float, float]:
+    """
+    watch a held-still hand and average its palm normal, giving us where
+    "flat" actually is for you. tilt mode subtracts this, the same way a
+    joystick gets centred.
+
+    needed because nobody's hand rests at a true zero: a real right hand
+    measured x=-0.165 holding comfortably flat, which is enough to make an
+    uncentred tilt mode creep sideways on its own.
+    """
+    xs: list[float] = []
+    zs: list[float] = []
+    start = time.monotonic()
+
+    async for frame in stream_frames():
+        if time.monotonic() - start >= duration:
+            break
+        hand = pick_hand(frame, preferred_hand)
+        if hand is None:
+            continue
+        normal = hand.get("palmNormal")
+        if not normal:
+            continue
+        xs.append(normal[0])
+        zs.append(normal[2])
+
+    if len(xs) < 20:
+        raise CalibrationError(
+            "couldn't get a steady read on your hand's angle. hold it still over the sensor."
+        )
+
+    return statistics.mean(xs), statistics.mean(zs)
+
+
 async def calibrate(
     settings: Settings,
     duration: float = SWEEP_SECONDS,
@@ -238,8 +278,28 @@ async def _run_async() -> None:
     print()
 
     settings.calibration = box
+
+    # tilt mode needs to know where your "flat" is, which is never actually
+    # zero. cheap to measure while we've got you here, and useless to guess.
+    print("one more thing, for tilt mode.")
+    input("hold your hand flat and comfortable over the sensor, then press enter...")
+    print(f"hold still for {NEUTRAL_TILT_SECONDS:.0f}s...")
+    try:
+        cx, cz = await collect_neutral_tilt(settings.preferred_hand)
+    except CalibrationError as exc:
+        print(f"couldn't measure your neutral tilt ({exc})")
+        print("skipping it, tilt mode may drift. the rest is saved.")
+    else:
+        settings.tilt_center_x = cx
+        settings.tilt_center_z = cz
+        print(f"neutral tilt: x={cx:+.3f} z={cz:+.3f}")
+        if abs(cx) > settings.tilt_deadzone or abs(cz) > settings.tilt_deadzone:
+            print("(your hand rests well off flat, so centring it here is what stops")
+            print(" tilt mode creeping sideways on its own)")
+
     save_config(settings)
 
+    print()
     print("saved. try `orvix cli --dry-run` to check it feels right before going live.")
 
 

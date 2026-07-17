@@ -41,6 +41,33 @@ def test_small_tilt_inside_deadzone_is_ignored():
     assert tilt_for(m, (s.tilt_deadzone * 0.5, -1.0, 0.0)) == (960, 540)
 
 
+def test_a_resting_hand_that_isnt_flat_doesnt_drift_once_centred():
+    """
+    the real one. a real right hand rests at about x=-0.165, which is
+    outside the deadzone, so without centring the cursor creeps left the
+    whole time you're just holding still.
+    """
+    resting_x = -0.165
+    s = Settings(tilt_center_x=resting_x)
+    m = TiltCoordMapper(1920, 1080, s)
+    assert tilt_for(m, (resting_x, -0.97, 0.0), frames=600) == (960, 540)
+
+
+def test_uncentred_that_same_hand_drifts():
+    """proves the test above is actually testing something."""
+    m = TiltCoordMapper(1920, 1080, Settings(tilt_center_x=0.0))
+    x, _ = tilt_for(m, (-0.165, -0.97, 0.0), frames=600)
+    assert x < 900, "should have crept left"
+
+
+def test_centring_shifts_which_way_you_have_to_tilt():
+    s = Settings(tilt_center_x=-0.165)
+    m = TiltCoordMapper(1920, 1080, s)
+    # tilting to a true 0.0 is, relative to this hand's neutral, a tilt right
+    x, _ = tilt_for(m, (0.0 + 0.2, -0.9, 0.0))
+    assert x > 960
+
+
 def test_tilting_right_moves_the_cursor_right():
     m = TiltCoordMapper(1920, 1080, Settings())
     x, _ = tilt_for(m, (0.5, -0.8, 0.0))

@@ -107,9 +107,20 @@ class Settings:
 
     # -- tilt mode tuning, ignored in the other modes --
     #
-    # how far you have to tilt before the cursor moves at all. leap's palm
-    # normal is never perfectly flat and nobody holds their hand at exactly
-    # 0 degrees, so without a deadzone the cursor creeps constantly.
+    # where "flat" actually is for you, subtracted before anything else.
+    #
+    # a joystick needs centring and so does this. nobody's hand rests at a
+    # true zero: measured on a real right hand, a comfortable flat palm sits
+    # at x=-0.165, which is outside the deadzone below, so an uncentred tilt
+    # mode just creeps left forever. your natural roll depends on your hand,
+    # your wrist and where the sensor is, so it can't be a fixed default
+    # (a left hand rolls the other way). `orvix calibrate` measures it.
+    tilt_center_x: float = 0.0
+    tilt_center_z: float = 0.0
+
+    # how far you have to tilt (past centre) before the cursor moves at all.
+    # the palm normal is noisy (about +-0.1 measured while holding still), so
+    # this has to comfortably clear that or the cursor jitters at rest.
     tilt_deadzone: float = 0.15
     # tilt at/above this (as a fraction of fully sideways) gives max speed.
     # keeping it well under 1.0 means you never have to tilt uncomfortably far.

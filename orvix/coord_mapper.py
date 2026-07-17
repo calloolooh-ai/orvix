@@ -269,7 +269,13 @@ class TiltCoordMapper:
         # palm normal points out of your palm. hand flat and palm down, it's
         # roughly (0, -1, 0). roll your hand left/right and x swings; pitch
         # it forward/back and z swings.
+        #
+        # centre it first: "flat" for a real hand isn't zero (a real right
+        # hand measured -0.165 on x), so without this the cursor drifts
+        # whenever you're just holding still. see tilt_center_x.
         nx, _ny, nz = palm_normal
+        nx -= self._settings.tilt_center_x
+        nz -= self._settings.tilt_center_z
 
         if self._t_prev is None:
             self._t_prev = timestamp
