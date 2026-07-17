@@ -44,6 +44,13 @@ ICON_ERROR = "❌"  # cross mark
 ACTION_CHOICES = ["click", "scroll", "disabled"]
 ACTION_LABELS = {"click": "Click / Drag", "scroll": "Scroll", "disabled": "Disabled"}
 
+CURSOR_MODES = ["relative", "tilt", "absolute"]
+CURSOR_MODE_LABELS = {
+    "relative": "Relative (trackpad)",
+    "tilt": "Tilt (joystick)",
+    "absolute": "Absolute (point at it)",
+}
+
 
 class _MainThreadInvoker(NSObject):
     """
@@ -90,11 +97,16 @@ class PipelineWorker:
         )
         self._thread.start()
 
-    def stop(self) -> None:
+    def stop(self, wait: bool = False) -> None:
         if not self.running or self._loop is None or self._task is None:
             return
         loop, task = self._loop, self._task
         loop.call_soon_threadsafe(task.cancel)
+        if wait and self._thread is not None:
+            # for restarts: the old thread has to actually be gone before we
+            # start a new one, or two pipelines briefly both drive the cursor.
+            # the timeout is so a wedged thread can't freeze the menu bar.
+            self._thread.join(timeout=2.0)
 
     def _run_thread(self, settings: Settings, dry_run: bool) -> None:
         loop = asyncio.new_event_loop()
@@ -116,10 +128,33 @@ class PipelineWorker:
             logger.exception("live pipeline crashed")
             self._on_error(str(exc))
         finally:
-            loop.close()
+            self._shutdown_loop(loop)
             self._loop = None
             self._task = None
             self._on_status("stopped")
+
+    @staticmethod
+    def _shutdown_loop(loop: asyncio.AbstractEventLoop) -> None:
+        """
+        let everything unwind before closing the loop.
+
+        cancelling the pipeline task leaves others still alive underneath it
+        (the frame reader, the leapd heartbeat, websockets' own keepalive).
+        closing the loop out from under them logs "Task was destroyed but it
+        is pending" and, worse, skips the cleanup that closes the websocket,
+        so every stop/start leaked a connection to leapd.
+        """
+        try:
+            pending = [t for t in asyncio.all_tasks(loop) if not t.done()]
+            for task in pending:
+                task.cancel()
+            if pending:
+                loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+            loop.run_until_complete(loop.shutdown_asyncgens())
+        except Exception:  # noqa: BLE001 - a messy teardown must not take the app down
+            logger.debug("pipeline loop teardown was not clean", exc_info=True)
+        finally:
+            loop.close()
 
 
 class OrvixApp(rumps.App):
@@ -143,6 +178,13 @@ class OrvixApp(rumps.App):
             self.grab_menu.add(
                 rumps.MenuItem(ACTION_LABELS[action], callback=self._make_action_setter("grab", action))
             )
+
+        self.mode_menu = rumps.MenuItem("Cursor mode...")
+        for mode in CURSOR_MODES:
+            self.mode_menu.add(
+                rumps.MenuItem(CURSOR_MODE_LABELS[mode], callback=self._make_mode_setter(mode))
+            )
+
         self._refresh_action_checkmarks()
 
         self.menu = [
@@ -152,6 +194,7 @@ class OrvixApp(rumps.App):
             self.start_stop_item,
             self.dry_run,
             None,
+            self.mode_menu,
             self.pinch_menu,
             self.grab_menu,
             None,
@@ -185,6 +228,25 @@ class OrvixApp(rumps.App):
         sender.state = not sender.state
         self.dry_run.state = sender.state
 
+    def _make_mode_setter(self, mode: str):
+        def _set(sender: rumps.MenuItem) -> None:
+            if self.settings.cursor_mode == mode:
+                return
+            self.settings.cursor_mode = mode
+            save_config(self.settings)
+            self._refresh_action_checkmarks()
+
+            # the mapper is built when the pipeline starts, so a mode change
+            # means nothing until it restarts. do that here rather than
+            # leaving the menu showing one mode while a different one is
+            # actually driving the cursor.
+            if self.worker.running:
+                dry_run = bool(self.dry_run.state)
+                self.worker.stop(wait=True)
+                self.worker.start(self.settings, dry_run=dry_run)
+
+        return _set
+
     def _make_action_setter(self, family: str, action: str):
         def _set(sender: rumps.MenuItem) -> None:
             if family == "pinch":
@@ -201,6 +263,8 @@ class OrvixApp(rumps.App):
             item.state = ACTION_LABELS[self.settings.pinch_action] == item.title
         for item in self.grab_menu.values():
             item.state = ACTION_LABELS[self.settings.grab_action] == item.title
+        for item in self.mode_menu.values():
+            item.state = CURSOR_MODE_LABELS.get(self.settings.cursor_mode) == item.title
 
     def _calibrate(self, sender: rumps.MenuItem) -> None:
         if self.worker.running:
