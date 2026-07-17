@@ -19,7 +19,21 @@ see `docs/SETUP.md` for the full architecture writeup and setup steps, since get
 
 ## status
 
-work in progress, building this out step by step. driver setup docs first, then the actual python pipeline.
+core pipeline is built and working (leap_client -> gesture_interpreter -> coord_mapper -> mouse_control). there's also a menu bar GUI now for running it without a terminal.
+
+## gui
+
+`python -m orvix.gui` puts an orvix icon in your menu bar. from there you can:
+
+- start/stop the live pipeline
+- toggle dry-run (logs intended actions instead of moving the real cursor)
+- remap what pinch and grab actually do: Click / Drag, Scroll, or Disabled
+- run calibration
+- see the last gesture event live
+
+everything still runs through the same `run_live()` in `orvix/main.py` the CLI uses, so CLI and GUI behavior can't drift apart.
+
+`python -m orvix.main` (with `--dry-run`, `--verbose`, `--calibrate`) still works as a plain CLI if you'd rather not use the menu bar app.
 
 ## requirements
 

@@ -64,6 +64,16 @@ class Settings:
     grab_threshold: float = 0.85
     grab_release_threshold: float = 0.6
 
+    # what the pinch and grab gestures actually do to the mouse. one of
+    # "click" (down/drag/up -> mouse_down/drag_to/mouse_up) or "scroll"
+    # (drag/scroll frames drive the scroll wheel via palm velocity) or
+    # "disabled" (gesture is tracked but produces no mouse action).
+    # defaults match orvix's original v1 behavior: pinch clicks/drags,
+    # grab scrolls. swappable so e.g. someone who scrolls a lot more than
+    # they drag can put scroll on the easier-to-hold pinch instead.
+    pinch_action: str = "click"
+    grab_action: str = "scroll"
+
     # One Euro Filter params, see coord_mapper.py for what these actually do.
     # these are the values from the original paper's pointer-tracking example,
     # decent starting point, hand-tune once you're moving a real cursor around
