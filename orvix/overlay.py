@@ -20,7 +20,7 @@ logger = logging.getLogger("orvix.overlay")
 
 try:
     import AppKit
-    import Quartz
+    import objc
     from objc import python_method
 
     _APPKIT_OK = True
@@ -51,7 +51,7 @@ if _APPKIT_OK:
         """draws the donut of wedges; state is set from python before display."""
 
         def initWithFrame_(self, frame):
-            self = AppKit.objc.super(_WheelView, self).initWithFrame_(frame)
+            self = objc.super(_WheelView, self).initWithFrame_(frame)
             if self is None:
                 return None
             self._actions = []
@@ -187,6 +187,7 @@ class OverlayController:
         self._window = None
         self._view = None
         self._screen_height = None
+        self._warned = False
 
     @property
     def available(self) -> bool:
@@ -202,7 +203,13 @@ class OverlayController:
             else:
                 self._show(state)
         except Exception:  # noqa: BLE001 - visual only, must not disturb the pipeline
-            logger.debug("overlay render failed", exc_info=True)
+            # surface the first failure loudly (once) so a broken overlay is
+            # diagnosable; stay quiet after that so we don't spam per frame.
+            if not self._warned:
+                self._warned = True
+                logger.warning("radial overlay failed to draw, running without it", exc_info=True)
+            else:
+                logger.debug("overlay render failed", exc_info=True)
 
     def _ensure_window(self) -> None:
         if self._window is not None:
@@ -241,3 +248,54 @@ class OverlayController:
     def _hide(self) -> None:
         if self._window is not None:
             self._window.orderOut_(None)
+
+
+def _demo() -> None:
+    """
+    `python -m orvix.overlay` shows the wheel in the middle of the screen and
+    sweeps the highlight around it for a few seconds, so you can eyeball the
+    overlay without the sensor. purely a visual check.
+    """
+    if not _APPKIT_OK:
+        print("AppKit not available, can't preview the overlay")
+        return
+
+    import math as _math
+
+    app = AppKit.NSApplication.sharedApplication()
+    app.setActivationPolicy_(AppKit.NSApplicationActivationPolicyAccessory)
+
+    screen = AppKit.NSScreen.mainScreen().frame().size
+    center = (screen.width / 2.0, screen.height / 2.0)  # already Cocoa-ish; flip below
+    actions = [
+        "mission_control", "maximize", "app_switcher", "undo",
+        "copy", "paste", "screenshot", "close",
+    ]
+    controller = OverlayController()
+    state = {"i": 0}
+
+    def tick(_timer):
+        i = state["i"]
+        if i >= len(actions) * 6:
+            AppKit.NSApp().terminate_(None)
+            return
+        hovered = (i // 3) % len(actions)
+        progress = (i % 3) / 3.0
+        controller.render(
+            {"center": (center[0], screen.height - center[1]),  # flip back for render()
+             "actions": actions, "hovered": hovered, "progress": progress}
+        )
+        state["i"] = i + 1
+
+    delegate_timer = AppKit.NSTimer.scheduledTimerWithTimeInterval_repeats_block_(
+        0.2, True, tick
+    )
+    AppKit.NSRunLoop.currentRunLoop().addTimer_forMode_(
+        delegate_timer, AppKit.NSRunLoopCommonModes
+    )
+    print("showing radial overlay preview for a few seconds...")
+    app.run()
+
+
+if __name__ == "__main__":
+    _demo()
