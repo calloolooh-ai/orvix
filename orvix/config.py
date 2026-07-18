@@ -16,6 +16,8 @@ from pathlib import Path
 
 import yaml
 
+from orvix.shortcuts import DEFAULT_RADIAL_ACTIONS as _DEFAULT_RADIAL_ACTIONS
+
 # where the user's personal config lives. gitignored on purpose, since it'll
 # have your specific hand-range calibration in it, not something to commit.
 DEFAULT_CONFIG_PATH = Path.home() / ".orvix" / "config.yaml"
@@ -184,6 +186,52 @@ class Settings:
     # they drag can put scroll on the easier-to-hold pinch instead.
     pinch_action: str = "click"
     grab_action: str = "scroll"
+
+    # radial menu (gesture 12): draw a circle to pop up a wheel of actions,
+    # then point at a wedge and either pinch or just rest on it (dwell) to
+    # fire. the wedges are keyboard shortcuts (see shortcuts.RADIAL_SHORTCUTS)
+    # so it needs no extra permissions beyond what key control already uses.
+    radial_menu_enabled: bool = True
+    # how long (seconds) to rest on a wedge before it fires without a pinch.
+    # 0 disables dwell entirely, leaving pinch-to-select only.
+    radial_dwell_seconds: float = 0.6
+    # radius (screen px) around the wheel centre that selects nothing, so the
+    # hand sitting near the middle right after the circle doesn't pick a wedge.
+    radial_dead_zone_px: float = 55.0
+    # the wedges, clockwise from top. each must be a key in
+    # shortcuts.RADIAL_SHORTCUTS, plus "close" which just dismisses.
+    radial_actions: list[str] = dataclasses.field(
+        default_factory=lambda: list(_DEFAULT_RADIAL_ACTIONS)
+    )
+    # how round a motion has to be to open the wheel: total swept angle in
+    # degrees, and the smallest loop (mm) that counts as deliberate.
+    radial_open_sweep_deg: float = 300.0
+    radial_open_min_radius_mm: float = 25.0
+
+    # the five extra gestures (see extra_gestures.py). each is independently
+    # toggleable; a couple share a hand pose with core gestures so they can be
+    # switched off if they get in the way.
+    #  - zoom:    pull two pinching hands apart / together
+    #  - volume:  twist your wrist while making a fist (coexists with grab
+    #             scroll, which reads vertical motion instead of twist)
+    #  - dwell:   rest the cursor still to left-click, hands-free
+    #  - pause:   hold both open palms out ("stop") to suspend/resume orvix
+    #  - confirm: hold a thumbs-up to press Return
+    zoom_enabled: bool = True
+    fist_twist_volume_enabled: bool = True
+    dwell_click_enabled: bool = True
+    palms_out_pause_enabled: bool = True
+    thumbs_up_confirm_enabled: bool = True
+    # tuning
+    zoom_step_mm: float = 14.0
+    volume_step_deg: float = 12.0
+    volume_step_percent: int = 6
+    # dwell stillness is judged in Leap palm millimetres, not screen pixels,
+    # so we don't have to re-map (and thus re-filter) the cursor position.
+    dwell_click_radius_mm: float = 12.0
+    dwell_click_seconds: float = 0.8
+    pause_hold_seconds: float = 0.6
+    confirm_hold_seconds: float = 0.5
 
     # One Euro Filter params, see one_euro_filter.py for the actual math.
     #

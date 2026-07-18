@@ -10,6 +10,19 @@ control your mac's mouse with hand gestures using an og Leap Motion Controller (
 - grab (make a fist) to scroll
 - drop your hand near the sensor to park: tracking down there is junk anyway, so it's treated as no hand and the cursor stops dead
 
+grab only kicks in on an actual closed fist now, not a loose curl, since leapd reads grabStrength high way before your hand is really shut. you can tune how strict that is from the menu bar.
+
+### extra gestures
+
+on top of the core set, these can each be toggled in the menu bar (under More gestures) or in config:
+
+- **draw a circle** to pop up a radial menu, then point at a wedge and either pinch or just rest on it (dwell) to fire it. the wheel is Mission Control, Maximize, App Switcher, Undo, Copy, Paste, Screenshot, and Close, and it draws itself on screen while it's open.
+- **two-hand pinch** and pull apart / push together to zoom
+- **make a fist and twist your wrist** like a knob to change volume
+- **hold the cursor still** for a beat to left-click, no pinch needed (dwell click)
+- **hold both palms out** like a stop sign to pause orvix, do it again to resume
+- **hold a thumbs-up** to press Return
+
 the cursor freezes the moment you start closing your fingers, so the click lands where you aimed instead of sliding off as your palm shifts. that drift is the classic hand-tracking-cursor problem and most projects never fix it.
 
 ### cursor modes
@@ -58,6 +71,9 @@ whichever terminal you launch from needs Accessibility + Input Monitoring, since
 - start/stop the live pipeline
 - toggle dry-run (logs intended actions instead of moving the real cursor)
 - remap what pinch and grab actually do: Click / Drag, Scroll, or Disabled
+- set how strict grab is about being a real fist
+- turn the radial menu on/off and set its dwell time
+- toggle any of the extra gestures (zoom, volume, dwell click, palms-out pause, thumbs-up)
 - run calibration
 - see the last gesture event live
 

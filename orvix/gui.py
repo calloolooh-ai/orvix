@@ -33,6 +33,7 @@ from orvix.config import Settings, load_config, save_config
 from orvix.gesture_interpreter import GestureEvent
 from orvix.leap_client import LeapConnectionError
 from orvix.main import run_live
+from orvix.overlay import OverlayController
 
 logger = logging.getLogger("orvix.gui")
 
@@ -69,6 +70,28 @@ FIST_SETTINGS = {
     "thumb": (True, 1),
     "loose": (True, 2),
 }
+
+
+# radial-menu dwell durations offered in the menu bar, label -> seconds.
+# "Off" leaves pinch-to-select as the only way to pick a wedge.
+DWELL_CHOICES = ["Off (pinch only)", "0.4s", "0.6s", "0.9s"]
+DWELL_SECONDS = {"Off (pinch only)": 0.0, "0.4s": 0.4, "0.6s": 0.6, "0.9s": 0.9}
+
+# the five extra gestures, as (menu label -> Settings flag) checkboxes.
+EXTRA_GESTURE_TOGGLES = [
+    ("Two-hand zoom", "zoom_enabled"),
+    ("Fist-twist volume", "fist_twist_volume_enabled"),
+    ("Dwell click", "dwell_click_enabled"),
+    ("Palms-out pause", "palms_out_pause_enabled"),
+    ("Thumbs-up = Return", "thumbs_up_confirm_enabled"),
+]
+
+
+def _dwell_label_for(settings: Settings) -> str:
+    for label, secs in DWELL_SECONDS.items():
+        if abs(secs - settings.radial_dwell_seconds) < 1e-6:
+            return label
+    return ""
 
 
 def _fist_choice_for(settings: Settings) -> str:
@@ -108,10 +131,11 @@ class PipelineWorker:
     touched via call_soon_threadsafe from here.
     """
 
-    def __init__(self, on_event, on_status, on_error):
+    def __init__(self, on_event, on_status, on_error, on_radial=None):
         self._on_event = on_event
         self._on_status = on_status
         self._on_error = on_error
+        self._on_radial = on_radial
         self._thread: threading.Thread | None = None
         self._loop: asyncio.AbstractEventLoop | None = None
         self._task: asyncio.Task | None = None
@@ -145,7 +169,13 @@ class PipelineWorker:
         asyncio.set_event_loop(loop)
         try:
             self._task = loop.create_task(
-                run_live(dry_run=dry_run, verbose=False, settings=settings, on_event=self._on_event)
+                run_live(
+                    dry_run=dry_run,
+                    verbose=False,
+                    settings=settings,
+                    on_event=self._on_event,
+                    on_radial=self._on_radial,
+                )
             )
             self._on_status("running")
             loop.run_until_complete(self._task)
@@ -222,6 +252,21 @@ class OrvixApp(rumps.App):
                 rumps.MenuItem(FIST_LABELS[choice], callback=self._make_fist_setter(choice))
             )
 
+        # gesture 12: circle to open the radial menu; pick a wedge by pinch or dwell
+        self.radial_toggle = rumps.MenuItem(
+            "Radial menu (circle to open)", callback=self._toggle_radial
+        )
+        self.radial_toggle.state = self.settings.radial_menu_enabled
+        self.dwell_menu = rumps.MenuItem("Radial dwell...")
+        for label in DWELL_CHOICES:
+            self.dwell_menu.add(rumps.MenuItem(label, callback=self._make_dwell_setter(label)))
+
+        self.extras_menu = rumps.MenuItem("More gestures...")
+        for label, attr in EXTRA_GESTURE_TOGGLES:
+            item = rumps.MenuItem(label, callback=self._make_extra_toggle(attr))
+            item.state = bool(getattr(self.settings, attr))
+            self.extras_menu.add(item)
+
         self._refresh_action_checkmarks()
 
         self.menu = [
@@ -236,15 +281,23 @@ class OrvixApp(rumps.App):
             self.grab_menu,
             self.fist_menu,
             None,
+            self.radial_toggle,
+            self.dwell_menu,
+            self.extras_menu,
+            None,
             rumps.MenuItem("Calibrate...", callback=self._calibrate),
             None,
             rumps.MenuItem("Quit", callback=self._quit),
         ]
 
+        # the on-screen radial wheel. safe no-op if AppKit isn't available.
+        self.overlay = OverlayController()
+
         self.worker = PipelineWorker(
             on_event=self._handle_event,
             on_status=self._handle_status,
             on_error=self._handle_error,
+            on_radial=self._handle_radial,
         )
         # gesture events can fire at up to target_fps (100/s by default), way
         # more often than a menu bar label needs redrawing. throttle how
@@ -296,6 +349,44 @@ class OrvixApp(rumps.App):
 
         return _set
 
+    def _toggle_radial(self, sender: rumps.MenuItem) -> None:
+        sender.state = not sender.state
+        self.settings.radial_menu_enabled = bool(sender.state)
+        save_config(self.settings)
+        # read live in the frame loop, so no pipeline restart needed
+
+    def _make_extra_toggle(self, attr: str):
+        def _set(sender: rumps.MenuItem) -> None:
+            sender.state = not sender.state
+            setattr(self.settings, attr, bool(sender.state))
+            save_config(self.settings)
+            # the extra-gesture set is built at pipeline start, so restart to
+            # apply, same as cursor mode and radial dwell.
+            if self.worker.running:
+                dry_run = bool(self.dry_run.state)
+                self.worker.stop(wait=True)
+                self.worker.start(self.settings, dry_run=dry_run)
+
+        return _set
+
+    def _make_dwell_setter(self, label: str):
+        def _set(sender: rumps.MenuItem) -> None:
+            secs = DWELL_SECONDS[label]
+            if abs(secs - self.settings.radial_dwell_seconds) < 1e-6:
+                return
+            self.settings.radial_dwell_seconds = secs
+            save_config(self.settings)
+            self._refresh_action_checkmarks()
+            # the RadialMenu is built with its dwell at pipeline start, so a
+            # change only lands on restart. do it now rather than leave the
+            # menu claiming one dwell while another is live.
+            if self.worker.running:
+                dry_run = bool(self.dry_run.state)
+                self.worker.stop(wait=True)
+                self.worker.start(self.settings, dry_run=dry_run)
+
+        return _set
+
     def _make_fist_setter(self, choice: str):
         def _set(sender: rumps.MenuItem) -> None:
             require, max_extended = FIST_SETTINGS[choice]
@@ -319,6 +410,9 @@ class OrvixApp(rumps.App):
         active_fist = _fist_choice_for(self.settings)
         for item in self.fist_menu.values():
             item.state = FIST_LABELS.get(active_fist) == item.title
+        active_dwell = _dwell_label_for(self.settings)
+        for item in self.dwell_menu.values():
+            item.state = active_dwell == item.title
 
     def _calibrate(self, sender: rumps.MenuItem) -> None:
         if self.worker.running:
@@ -357,6 +451,12 @@ class OrvixApp(rumps.App):
 
     def _handle_error(self, message: str) -> None:
         self._on_main_thread(self._show_error, message)
+
+    def _handle_radial(self, state) -> None:
+        # fired from the pipeline thread; the overlay is Cocoa, so hop to the
+        # main thread before drawing. not throttled: the wheel is only up
+        # briefly and wants to track the hand smoothly.
+        self._on_main_thread(self.overlay.render, state)
 
     @staticmethod
     def _on_main_thread(fn, *args) -> None:

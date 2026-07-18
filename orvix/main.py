@@ -33,6 +33,18 @@ from orvix.leap_client import (
     stream_latest_frames,
 )
 from orvix.mouse_control import DryRunMouseController, MouseController, QuartzMouseController
+from orvix.circle_detector import CircleDetector
+from orvix.radial_menu import RadialMenu, RadialOutcome
+from orvix.shortcuts import CONFIRM_SHORTCUT, RADIAL_SHORTCUTS
+from orvix.extra_gestures import (
+    ExtraAction,
+    ExtraGestures,
+    HandSignals,
+    is_halt_hand,
+    is_thumbs_up,
+    roll_from_normal,
+)
+import math
 
 logger = logging.getLogger("orvix.main")
 
@@ -131,11 +143,153 @@ def _dispatch(
                 mouse.scroll(0, scroll_amount)
 
 
+RadialListener = Callable[[dict | None], None]
+
+
+def _radial_state(radial: RadialMenu, hovered: int | None, progress: float) -> dict:
+    return {
+        "center": radial.center,
+        "actions": radial.actions,
+        "hovered": hovered,
+        "progress": progress,
+    }
+
+
+def _fire_radial(
+    radial: RadialMenu,
+    hand: dict | None,
+    mapper: Mapper,
+    mouse: MouseController,
+    settings: Settings,
+    now: float,
+    on_radial: RadialListener | None = None,
+) -> None:
+    """
+    drive the open radial menu for one frame from the raw hand, bypassing the
+    normal cursor pipeline (while the wheel is up the hand is steering the
+    wheel, not the cursor). fires the chosen wedge's keystroke, and resets the
+    mapper on close so a relative-mode anchor doesn't lurch the cursor when
+    normal control resumes. on_radial, if given, gets the live wheel state for
+    the overlay each frame, and None on the frame it closes.
+    """
+    if hand is None:
+        radial.cancel()
+        mapper.reset()
+        if on_radial is not None:
+            on_radial(None)
+        return
+
+    palm = tuple(hand["palmPosition"])
+    pointer = mapper.map_to_screen(palm, now)
+    pinching = hand.get("pinchStrength", 0.0) >= settings.pinch_threshold
+    upd = radial.update(pointer, pinching, now)
+
+    if upd.outcome == RadialOutcome.FIRED and upd.fired_action:
+        shortcut = RADIAL_SHORTCUTS.get(upd.fired_action)
+        if shortcut is not None:
+            mouse.key_shortcut(shortcut.keycode, shortcut.mods)
+        logger.info("radial menu fired: %s", upd.fired_action)
+
+    if upd.outcome != RadialOutcome.NONE:  # FIRED or DISMISSED -> wheel closed
+        mapper.reset()
+        if on_radial is not None:
+            on_radial(None)
+    elif on_radial is not None:
+        on_radial(_radial_state(radial, upd.hovered_index, upd.dwell_progress))
+
+
+def _build_extras(settings: Settings) -> ExtraGestures:
+    return ExtraGestures(
+        zoom_enabled=settings.zoom_enabled,
+        volume_enabled=settings.fist_twist_volume_enabled,
+        dwell_enabled=settings.dwell_click_enabled,
+        pause_enabled=settings.palms_out_pause_enabled,
+        confirm_enabled=settings.thumbs_up_confirm_enabled,
+        zoom_step_mm=settings.zoom_step_mm,
+        volume_step_deg=settings.volume_step_deg,
+        dwell_radius_px=settings.dwell_click_radius_mm,  # judged in palm mm
+        dwell_seconds=settings.dwell_click_seconds,
+        pause_hold_seconds=settings.pause_hold_seconds,
+        confirm_hold_seconds=settings.confirm_hold_seconds,
+    )
+
+
+def _compute_signals(
+    frame: dict,
+    primary: dict | None,
+    events: list[GestureEvent],
+    settings: Settings,
+) -> HandSignals:
+    """
+    boil a frame down to the handful of signals the extra gestures watch. all
+    in raw Leap space (no cursor mapping), so it can't perturb cursor state.
+    """
+    sig = HandSignals()
+    hands = frame.get("hands", [])
+
+    # two-hand zoom: distance between the two palms while both hands pinch
+    pinching = [h for h in hands if h.get("pinchStrength", 0.0) >= settings.pinch_threshold]
+    if len(pinching) >= 2:
+        a = tuple(pinching[0]["palmPosition"])
+        b = tuple(pinching[1]["palmPosition"])
+        sig.two_hand_pinch_span = math.dist(a, b)
+
+    # both palms out -> "stop": count open, upright hands
+    upright_open = 0
+    for h in hands:
+        ext = extended_fingers_for_hand(frame, h)
+        normal = tuple(h.get("palmNormal", (0.0, -1.0, 0.0)))
+        if is_halt_hand(ext, normal):
+            upright_open += 1
+    sig.palms_out = upright_open >= 2
+
+    if primary is not None:
+        normal = tuple(primary.get("palmNormal", (0.0, -1.0, 0.0)))
+        if primary.get("grabStrength", 0.0) >= settings.grab_threshold:
+            sig.fist_roll_rad = roll_from_normal(normal)
+        sig.thumbs_up = is_thumbs_up(extended_fingers_for_hand(frame, primary), normal)
+
+    # dwell only arms on a plain idle move frame (no pinch/grab/freeze in
+    # play), tracked in palm mm so it doesn't need the cursor mapping
+    move = next((e for e in events if e.type == GestureType.POINT_MOVE), None)
+    if move is not None and move.palm_position is not None:
+        sig.hover_point = (move.palm_position[0], move.palm_position[1])
+
+    return sig
+
+
+def _execute_extras(
+    actions: list[ExtraAction],
+    mouse: MouseController,
+    mapper: Mapper,
+    settings: Settings,
+) -> None:
+    for action in actions:
+        if action == ExtraAction.ZOOM_IN:
+            mouse.zoom(1)
+        elif action == ExtraAction.ZOOM_OUT:
+            mouse.zoom(-1)
+        elif action == ExtraAction.VOLUME_UP:
+            mouse.set_volume_relative(settings.volume_step_percent)
+        elif action == ExtraAction.VOLUME_DOWN:
+            mouse.set_volume_relative(-settings.volume_step_percent)
+        elif action == ExtraAction.DWELL_CLICK:
+            mouse.click()
+        elif action == ExtraAction.CONFIRM:
+            mouse.key_shortcut(CONFIRM_SHORTCUT.keycode, CONFIRM_SHORTCUT.mods)
+        elif action in (ExtraAction.PAUSE_ON, ExtraAction.PAUSE_OFF):
+            # freeze/unfreeze cleanly: drop the relative anchor so the cursor
+            # doesn't jump when control resumes
+            mapper.reset()
+            logger.info("orvix %s", "paused" if action == ExtraAction.PAUSE_ON else "resumed")
+
+
 async def run_live(
     dry_run: bool,
     verbose: bool,
     settings: Settings | None = None,
     on_event: Callable[[GestureEvent], None] | None = None,
+    on_radial: RadialListener | None = None,
 ) -> None:
     """
     the live control loop. settings and on_event are optional hooks so
@@ -151,6 +305,20 @@ async def run_live(
     interpreter = GestureInterpreter(settings)
     mouse: MouseController = DryRunMouseController() if dry_run else QuartzMouseController()
 
+    # gesture 12: circle to open the radial menu, then pinch or dwell a wedge.
+    radial = RadialMenu(
+        settings.radial_actions,
+        dead_zone_px=settings.radial_dead_zone_px,
+        dwell_seconds=settings.radial_dwell_seconds,
+    )
+    circle = CircleDetector(
+        sweep_threshold_deg=settings.radial_open_sweep_deg,
+        min_radius_mm=settings.radial_open_min_radius_mm,
+    )
+    # gestures 1/5/8/10/13: zoom, fist-twist volume, dwell-click, palms-out
+    # pause, thumbs-up confirm
+    extras = _build_extras(settings)
+
     logger.info("cursor mode: %s", settings.cursor_mode)
     if dry_run:
         logger.info("running in --dry-run mode, not touching the real cursor")
@@ -160,6 +328,15 @@ async def run_live(
         # frames that piled up rather than replaying stale hand positions
         async for frame in stream_latest_frames():
             hand = pick_hand(frame, settings.preferred_hand)
+            now = time.monotonic()
+
+            # while the radial menu is up it owns the hand: point at a wedge
+            # and pinch/dwell to pick. skip the normal cursor pipeline so we
+            # don't also move the cursor or click underneath the wheel.
+            if radial.is_open:
+                _fire_radial(radial, hand, mapper, mouse, settings, now, on_radial)
+                continue
+
             # fingertips are only needed to tell an index pinch from a middle
             # one for right clicks, so don't bother digging them out if the
             # hand's gone
@@ -172,12 +349,40 @@ async def run_live(
             )
             events = interpreter.process_hand(hand, fingertips, extended_fingers)
 
+            if hand is None:
+                circle.reset()
+                extras.reset_transient()
+
+            # extra gestures (zoom/volume/dwell/pause/confirm) run off raw hand
+            # signals and can pause everything. do them before cursor dispatch
+            # so the "stop" pose can gate this frame.
+            signals = _compute_signals(frame, hand, events, settings)
+            _execute_extras(extras.observe(signals, now), mouse, mapper, settings)
+            if extras.paused:
+                continue  # suspended: no cursor moves, clicks, or menu opening
+
+            # a two-hand pinch is a zoom, not a click: don't also let the
+            # primary hand's pinch drive the mouse this frame
+            zoom_active = signals.two_hand_pinch_span is not None
+
             for event in events:
                 if verbose:
                     logger.info("event: %s", event)
                 if on_event is not None:
                     on_event(event)
-                _dispatch(event, mapper, mouse, settings)
+                if not zoom_active:
+                    _dispatch(event, mapper, mouse, settings)
+
+            # after normal dispatch, watch for a circle to open the wheel. uses
+            # the horizontal palm plane (x, z); a completed loop pops the menu
+            # centred on wherever the cursor currently is.
+            if settings.radial_menu_enabled and hand is not None and not zoom_active:
+                palm = hand["palmPosition"]
+                if circle.feed(palm[0], palm[2], now):
+                    center = mapper.map_to_screen(tuple(palm), now)
+                    radial.open(center, now)
+                    if on_radial is not None:
+                        on_radial(_radial_state(radial, None, 0.0))
     except LeapConnectionError as exc:
         logger.error(str(exc))
         raise SystemExit(1) from exc

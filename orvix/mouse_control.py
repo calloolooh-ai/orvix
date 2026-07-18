@@ -18,6 +18,7 @@ without risking your actual desktop.
 from __future__ import annotations
 
 import logging
+import subprocess
 from typing import Protocol
 
 import Quartz
@@ -32,6 +33,20 @@ class MouseController(Protocol):
     def drag_to(self, x: int, y: int) -> None: ...
     def scroll(self, dx: int, dy: int) -> None: ...
     def right_click(self) -> None: ...
+    def key_shortcut(self, keycode: int, mods: tuple[str, ...] = ()) -> None: ...
+    def click(self) -> None: ...
+    def zoom(self, steps: int) -> None: ...
+    def set_volume_relative(self, delta_percent: int) -> None: ...
+
+
+# modifier name -> CGEventFlags mask. kept next to the only code that posts
+# keys so the flag constants stay out of the pure shortcuts table.
+_MODIFIER_FLAGS = {
+    "cmd": Quartz.kCGEventFlagMaskCommand,
+    "shift": Quartz.kCGEventFlagMaskShift,
+    "ctrl": Quartz.kCGEventFlagMaskControl,
+    "alt": Quartz.kCGEventFlagMaskAlternate,
+}
 
 
 class QuartzMouseController:
@@ -113,6 +128,63 @@ class QuartzMouseController:
             )
             Quartz.CGEventPost(Quartz.kCGHIDEventTap, event)
 
+    def key_shortcut(self, keycode: int, mods: tuple[str, ...] = ()) -> None:
+        """
+        press and release a key with modifiers held, e.g. Cmd-C. the modifier
+        flags have to be stamped on the key events themselves, not posted as
+        separate flagsChanged events, or apps see a bare keypress with no
+        modifier and the shortcut does nothing.
+        """
+        flags = 0
+        for name in mods:
+            flags |= _MODIFIER_FLAGS[name]
+
+        for pressed in (True, False):
+            event = Quartz.CGEventCreateKeyboardEvent(None, keycode, pressed)
+            if flags:
+                Quartz.CGEventSetFlags(event, flags)
+            Quartz.CGEventPost(Quartz.kCGHIDEventTap, event)
+
+    def click(self) -> None:
+        """
+        a full left press+release at the current cursor position, for the
+        dwell-click gesture. doesn't touch _button_down since it's a complete
+        click, not the start of a hold like mouse_down.
+        """
+        pos = Quartz.CGEventGetLocation(Quartz.CGEventCreate(None))
+        for kind in (Quartz.kCGEventLeftMouseDown, Quartz.kCGEventLeftMouseUp):
+            event = Quartz.CGEventCreateMouseEvent(
+                None, kind, (pos.x, pos.y), Quartz.kCGMouseButtonLeft
+            )
+            Quartz.CGEventPost(Quartz.kCGHIDEventTap, event)
+
+    def zoom(self, steps: int) -> None:
+        """
+        Cmd-held scroll, which most apps and macOS's own zoom read as
+        zoom in/out. positive steps zoom in.
+        """
+        event = Quartz.CGEventCreateScrollWheelEvent(
+            None, Quartz.kCGScrollEventUnitLine, 1, steps
+        )
+        Quartz.CGEventSetFlags(event, Quartz.kCGEventFlagMaskCommand)
+        Quartz.CGEventPost(Quartz.kCGHIDEventTap, event)
+
+    def set_volume_relative(self, delta_percent: int) -> None:
+        """
+        nudge system output volume by delta_percent (can be negative). done
+        via osascript because the media keys are NSSystemDefined events that
+        CGEventCreateKeyboardEvent can't produce; AppleScript is the reliable
+        path and volume changes are infrequent enough that spawning it is fine.
+        """
+        script = (
+            "set volume output volume "
+            f"(output volume of (get volume settings) + ({delta_percent}))"
+        )
+        try:
+            subprocess.run(["osascript", "-e", script], check=False, capture_output=True)
+        except OSError:
+            logger.debug("osascript volume change failed", exc_info=True)
+
 
 class DryRunMouseController:
     """logs intended mouse actions instead of touching the real cursor, for --dry-run."""
@@ -134,3 +206,16 @@ class DryRunMouseController:
 
     def right_click(self) -> None:
         logger.info("[dry-run] right click")
+
+    def key_shortcut(self, keycode: int, mods: tuple[str, ...] = ()) -> None:
+        combo = "+".join((*mods, str(keycode)))
+        logger.info("[dry-run] key shortcut %s", combo)
+
+    def click(self) -> None:
+        logger.info("[dry-run] click")
+
+    def zoom(self, steps: int) -> None:
+        logger.info("[dry-run] zoom %+d", steps)
+
+    def set_volume_relative(self, delta_percent: int) -> None:
+        logger.info("[dry-run] volume %+d%%", delta_percent)
