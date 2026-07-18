@@ -229,7 +229,7 @@ class Settings:
     # dwell stillness is judged in Leap palm millimetres, not screen pixels,
     # so we don't have to re-map (and thus re-filter) the cursor position.
     dwell_click_radius_mm: float = 12.0
-    dwell_click_seconds: float = 0.8
+    dwell_click_seconds: float = 1.5
     pause_hold_seconds: float = 0.6
     confirm_hold_seconds: float = 0.5
 

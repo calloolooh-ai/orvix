@@ -104,6 +104,29 @@ def test_holding_still_dwell_clicks_once():
     assert ex.observe(HandSignals(hover_point=p), now=0.9) == []
 
 
+def test_dwell_progress_climbs_then_clears_on_click():
+    ex = make(dwell_seconds=0.6)
+    p = (400.0, 300.0)
+    ex.observe(HandSignals(hover_point=p), now=0.0)
+    assert ex.dwell_progress == 0.0
+    ex.observe(HandSignals(hover_point=p), now=0.3)
+    assert 0.4 < ex.dwell_progress < 0.6  # about halfway
+    ex.observe(HandSignals(hover_point=p), now=0.61)  # fires
+    assert ex.dwell_progress == 0.0  # ring hidden once the click lands
+
+
+def test_dwell_progress_is_zero_when_paused():
+    ex = make(dwell_seconds=0.6, pause_hold_seconds=0.4)
+    p = (400.0, 300.0)
+    ex.observe(HandSignals(hover_point=p), now=0.0)
+    ex.observe(HandSignals(hover_point=p), now=0.3)
+    # pause: dwell progress must read 0 so the ring disappears while suspended
+    ex.observe(HandSignals(palms_out=True), now=0.4)
+    ex.observe(HandSignals(palms_out=True), now=0.81)
+    assert ex.paused
+    assert ex.dwell_progress == 0.0
+
+
 def test_moving_away_rearms_the_dwell():
     ex = make(dwell_seconds=0.6)
     p = (400.0, 300.0)

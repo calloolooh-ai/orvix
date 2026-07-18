@@ -33,7 +33,7 @@ from orvix.config import Settings, load_config, save_config
 from orvix.gesture_interpreter import GestureEvent
 from orvix.leap_client import LeapConnectionError
 from orvix.main import run_live
-from orvix.overlay import OverlayController
+from orvix.overlay import DwellRingController, OverlayController
 
 logger = logging.getLogger("orvix.gui")
 
@@ -131,11 +131,12 @@ class PipelineWorker:
     touched via call_soon_threadsafe from here.
     """
 
-    def __init__(self, on_event, on_status, on_error, on_radial=None):
+    def __init__(self, on_event, on_status, on_error, on_radial=None, on_dwell=None):
         self._on_event = on_event
         self._on_status = on_status
         self._on_error = on_error
         self._on_radial = on_radial
+        self._on_dwell = on_dwell
         self._thread: threading.Thread | None = None
         self._loop: asyncio.AbstractEventLoop | None = None
         self._task: asyncio.Task | None = None
@@ -175,6 +176,7 @@ class PipelineWorker:
                     settings=settings,
                     on_event=self._on_event,
                     on_radial=self._on_radial,
+                    on_dwell=self._on_dwell,
                 )
             )
             self._on_status("running")
@@ -290,14 +292,17 @@ class OrvixApp(rumps.App):
             rumps.MenuItem("Quit", callback=self._quit),
         ]
 
-        # the on-screen radial wheel. safe no-op if AppKit isn't available.
+        # the on-screen radial wheel + the cursor dwell ring. safe no-ops if
+        # AppKit isn't available.
         self.overlay = OverlayController()
+        self.dwell_ring = DwellRingController()
 
         self.worker = PipelineWorker(
             on_event=self._handle_event,
             on_status=self._handle_status,
             on_error=self._handle_error,
             on_radial=self._handle_radial,
+            on_dwell=self._handle_dwell,
         )
         # gesture events can fire at up to target_fps (100/s by default), way
         # more often than a menu bar label needs redrawing. throttle how
@@ -457,6 +462,10 @@ class OrvixApp(rumps.App):
         # main thread before drawing. not throttled: the wheel is only up
         # briefly and wants to track the hand smoothly.
         self._on_main_thread(self.overlay.render, state)
+
+    def _handle_dwell(self, progress) -> None:
+        # same main-thread hop for the cursor dwell ring
+        self._on_main_thread(self.dwell_ring.render, progress)
 
     @staticmethod
     def _on_main_thread(fn, *args) -> None:

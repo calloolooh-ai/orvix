@@ -155,19 +155,29 @@ class _DwellClicker:
         self._anchor: tuple[float, float] | None = None
         self._since = 0.0
         self._fired = False
+        # 0..1 progress of the current settle, for the cursor ring. 0 when not
+        # dwelling or once the click has fired.
+        self.progress = 0.0
 
     def feed(self, point: tuple[float, float] | None, now: float) -> list[ExtraAction]:
         if point is None or self._dwell <= 0:
             self._anchor = None
+            self.progress = 0.0
             return []
         if self._anchor is None or math.dist(point, self._anchor) > self._radius:
             # first hover, or drifted off; (re)arm the timer here
             self._anchor = point
             self._since = now
             self._fired = False
+            self.progress = 0.0
             return []
-        if not self._fired and now - self._since >= self._dwell:
+        if self._fired:
+            self.progress = 0.0  # already clicked; ring stays hidden until you move
+            return []
+        self.progress = min((now - self._since) / self._dwell, 1.0)
+        if now - self._since >= self._dwell:
             self._fired = True  # one click per settle; move away to re-arm
+            self.progress = 0.0
             return [ExtraAction.DWELL_CLICK]
         return []
 
@@ -233,6 +243,13 @@ class ExtraGestures:
         self._confirm = _HoldToggle(confirm_hold_seconds)
 
         self.paused = False
+
+    @property
+    def dwell_progress(self) -> float:
+        """0..1 fill of the dwell-click ring, 0 when off/paused/not settling."""
+        if not self._dwell_on or self.paused:
+            return 0.0
+        return self._dwell.progress
 
     def reset_transient(self) -> None:
         """

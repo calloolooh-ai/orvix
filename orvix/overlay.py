@@ -250,6 +250,118 @@ class OverlayController:
             self._window.orderOut_(None)
 
 
+_RING_BOX = 64.0
+
+
+if _APPKIT_OK:
+
+    class _RingView(AppKit.NSView):
+        """a thin progress ring, filling clockwise from the top."""
+
+        def initWithFrame_(self, frame):
+            self = objc.super(_RingView, self).initWithFrame_(frame)
+            if self is None:
+                return None
+            self._progress = 0.0
+            return self
+
+        @python_method
+        def set_progress(self, progress):
+            self._progress = max(0.0, min(float(progress), 1.0))
+
+        def drawRect_(self, _rect):
+            try:
+                self._draw()
+            except Exception:  # noqa: BLE001 - never let a draw error escape into Cocoa
+                logger.debug("dwell ring draw failed", exc_info=True)
+
+        @python_method
+        def _draw(self):
+            c = _RING_BOX / 2.0
+            r = c - 6.0
+
+            track = AppKit.NSBezierPath.bezierPathWithOvalInRect_(
+                ((c - r, c - r), (2 * r, 2 * r))
+            )
+            track.setLineWidth_(4.0)
+            AppKit.NSColor.colorWithCalibratedWhite_alpha_(0.0, 0.28).set()
+            track.stroke()
+
+            if self._progress <= 0.0:
+                return
+            arc = AppKit.NSBezierPath.bezierPath()
+            arc.setLineWidth_(4.0)
+            arc.setLineCapStyle_(AppKit.NSLineCapStyleRound)
+            arc.appendBezierPathWithArcWithCenter_radius_startAngle_endAngle_clockwise_(
+                (c, c), r, 90.0, 90.0 - self._progress * 360.0, True
+            )
+            AppKit.NSColor.colorWithCalibratedRed_green_blue_alpha_(0.31, 0.42, 0.54, 0.95).set()
+            arc.stroke()
+
+
+class DwellRingController:
+    """
+    a small ring drawn around the live cursor while the dwell-click gesture is
+    counting down. positions itself at the current mouse location each frame,
+    so it needs only the progress value. safe no-op without AppKit.
+    """
+
+    def __init__(self) -> None:
+        self._window = None
+        self._view = None
+        self._warned = False
+
+    def render(self, progress: float | None) -> None:
+        """0..1 to show the ring at the cursor, or None/0 to hide it."""
+        if not _APPKIT_OK:
+            return
+        try:
+            if not progress:
+                self._hide()
+            else:
+                self._show(progress)
+        except Exception:  # noqa: BLE001 - visual only
+            if not self._warned:
+                self._warned = True
+                logger.warning("dwell ring failed to draw, running without it", exc_info=True)
+            else:
+                logger.debug("dwell ring render failed", exc_info=True)
+
+    def _ensure_window(self) -> None:
+        if self._window is not None:
+            return
+        rect = ((0.0, 0.0), (_RING_BOX, _RING_BOX))
+        window = AppKit.NSWindow.alloc().initWithContentRect_styleMask_backing_defer_(
+            rect, AppKit.NSWindowStyleMaskBorderless, AppKit.NSBackingStoreBuffered, False
+        )
+        window.setOpaque_(False)
+        window.setBackgroundColor_(AppKit.NSColor.clearColor())
+        window.setLevel_(AppKit.NSStatusWindowLevel)
+        window.setIgnoresMouseEvents_(True)
+        window.setCollectionBehavior_(
+            AppKit.NSWindowCollectionBehaviorCanJoinAllSpaces
+            | AppKit.NSWindowCollectionBehaviorStationary
+        )
+        view = _RingView.alloc().initWithFrame_(rect)
+        window.setContentView_(view)
+        self._window = window
+        self._view = view
+
+    def _show(self, progress: float) -> None:
+        self._ensure_window()
+        # NSEvent.mouseLocation is already in Cocoa bottom-left screen coords,
+        # so the ring can follow the cursor with no mapping needed.
+        loc = AppKit.NSEvent.mouseLocation()
+        self._window.setFrameOrigin_((loc.x - _RING_BOX / 2.0, loc.y - _RING_BOX / 2.0))
+        self._view.set_progress(progress)
+        self._view.setNeedsDisplay_(True)
+        self._window.orderFrontRegardless()
+
+    def _hide(self) -> None:
+        if self._window is not None:
+            self._window.orderOut_(None)
+
+
 def _demo() -> None:
     """
     `python -m orvix.overlay` shows the wheel in the middle of the screen and

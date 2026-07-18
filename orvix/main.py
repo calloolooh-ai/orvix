@@ -144,6 +144,7 @@ def _dispatch(
 
 
 RadialListener = Callable[[dict | None], None]
+DwellListener = Callable[[float | None], None]
 
 
 def _radial_state(radial: RadialMenu, hovered: int | None, progress: float) -> dict:
@@ -290,6 +291,7 @@ async def run_live(
     settings: Settings | None = None,
     on_event: Callable[[GestureEvent], None] | None = None,
     on_radial: RadialListener | None = None,
+    on_dwell: DwellListener | None = None,
 ) -> None:
     """
     the live control loop. settings and on_event are optional hooks so
@@ -322,6 +324,10 @@ async def run_live(
     logger.info("cursor mode: %s", settings.cursor_mode)
     if dry_run:
         logger.info("running in --dry-run mode, not touching the real cursor")
+
+    # whether the dwell ring is currently shown, so we send exactly one "hide"
+    # when the countdown ends rather than a None every idle frame
+    dwell_shown = False
 
     try:
         # latest-frame-wins: if a CGEventPost stall puts us behind, skip the
@@ -358,6 +364,18 @@ async def run_live(
             # so the "stop" pose can gate this frame.
             signals = _compute_signals(frame, hand, events, settings)
             _execute_extras(extras.observe(signals, now), mouse, mapper, settings)
+
+            # feed the cursor dwell-countdown ring: send progress while it
+            # climbs, and one hide when it ends
+            if on_dwell is not None:
+                progress = extras.dwell_progress
+                if progress > 0.01:
+                    on_dwell(progress)
+                    dwell_shown = True
+                elif dwell_shown:
+                    on_dwell(None)
+                    dwell_shown = False
+
             if extras.paused:
                 continue  # suspended: no cursor moves, clicks, or menu opening
 
