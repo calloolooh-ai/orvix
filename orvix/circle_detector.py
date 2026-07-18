@@ -29,8 +29,8 @@ class CircleDetector:
         *,
         window_seconds: float = 1.5,
         min_points: int = 5,
-        min_radius_mm: float = 25.0,
-        sweep_threshold_deg: float = 300.0,
+        min_radius_mm: float = 35.0,
+        sweep_threshold_deg: float = 400.0,
         cooldown_seconds: float = 0.8,
     ):
         self._window = window_seconds

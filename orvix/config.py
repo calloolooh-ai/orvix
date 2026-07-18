@@ -205,9 +205,11 @@ class Settings:
         default_factory=lambda: list(_DEFAULT_RADIAL_ACTIONS)
     )
     # how round a motion has to be to open the wheel: total swept angle in
-    # degrees, and the smallest loop (mm) that counts as deliberate.
-    radial_open_sweep_deg: float = 300.0
-    radial_open_min_radius_mm: float = 25.0
+    # degrees, and the smallest loop (mm) that counts as deliberate. set well
+    # past 360 so a casual curved hand-move can't reach it: you have to go all
+    # the way around and then some, on purpose.
+    radial_open_sweep_deg: float = 400.0
+    radial_open_min_radius_mm: float = 35.0
 
     # the five extra gestures (see extra_gestures.py). each is independently
     # toggleable; a couple share a hand pose with core gestures so they can be

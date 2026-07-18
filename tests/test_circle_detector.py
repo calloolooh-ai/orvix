@@ -27,8 +27,17 @@ def feed_all(det, pts):
 
 def test_a_full_circle_fires_once():
     det = CircleDetector()
-    fired = feed_all(det, circle_points(40, radius=40.0, turns=1.0))
+    fired = feed_all(det, circle_points(48, radius=40.0, turns=1.25))
     assert len(fired) == 1
+
+
+def test_a_single_loop_or_a_broad_curve_is_not_enough():
+    # a casual curved hand-move, and even one exact full turn, must not open
+    # the wheel: you have to go past a full loop on purpose
+    det = CircleDetector()
+    assert feed_all(det, circle_points(40, radius=40.0, turns=0.75)) == []  # 270 deg arc
+    det2 = CircleDetector()
+    assert feed_all(det2, circle_points(40, radius=40.0, turns=1.0)) == []  # exactly 360
 
 
 def test_a_straight_line_never_fires():
@@ -61,7 +70,7 @@ def test_two_circles_fire_twice_but_respect_cooldown():
 
 def test_counterclockwise_also_fires():
     det = CircleDetector()
-    fired = feed_all(det, circle_points(40, radius=40.0, turns=-1.0))
+    fired = feed_all(det, circle_points(48, radius=40.0, turns=-1.25))
     assert len(fired) == 1
 
 
