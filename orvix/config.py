@@ -193,8 +193,9 @@ class Settings:
     # so it needs no extra permissions beyond what key control already uses.
     radial_menu_enabled: bool = True
     # how long (seconds) to rest on a wedge before it fires without a pinch.
-    # 0 disables dwell entirely, leaving pinch-to-select only.
-    radial_dwell_seconds: float = 0.6
+    # 0 disables dwell entirely, leaving pinch-to-select only (the default:
+    # dwell-in-the-wheel fired too eagerly right after the opening circle).
+    radial_dwell_seconds: float = 0.0
     # radius (screen px) around the wheel centre that selects nothing, so the
     # hand sitting near the middle right after the circle doesn't pick a wedge.
     radial_dead_zone_px: float = 55.0

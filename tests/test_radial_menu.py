@@ -127,6 +127,22 @@ def test_dropping_into_dead_zone_resets_dwell():
     assert menu.update(point_at(5), pinching=False, now=1.0).outcome == RadialOutcome.NONE
 
 
+def test_dwell_disabled_means_pinch_only():
+    # dwell_seconds=0: resting on a wedge forever must never fire; only a
+    # pinch selects
+    menu = RadialMenu(ACTIONS, dead_zone_px=55.0, dwell_seconds=0.0)
+    menu.open(CENTER, now=0.0)
+    p = point_at(4)  # "copy"
+    for t in (0.0, 0.5, 1.0, 3.0, 10.0):
+        upd = menu.update(p, pinching=False, now=t)
+        assert upd.outcome == RadialOutcome.NONE
+        assert upd.dwell_progress == 0.0
+    assert menu.is_open
+    fired = menu.update(p, pinching=True, now=10.05)
+    assert fired.outcome == RadialOutcome.FIRED
+    assert fired.fired_action == "copy"
+
+
 def test_close_wedge_dismisses_rather_than_firing():
     menu = make_menu()
     menu.open(CENTER, now=0.0)
