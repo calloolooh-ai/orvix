@@ -191,6 +191,34 @@ def fingertips_for_hand(frame: dict, hand: dict) -> dict[int, tuple[float, float
     return tips
 
 
+def extended_fingers_for_hand(frame: dict, hand: dict) -> set[int] | None:
+    """
+    which fingers of this hand are currently extended (straight), as a set of
+    SDK finger types (0 thumb .. 4 pinky). used to tell a real closed fist
+    from a partial curl for the grab gesture.
+
+    returns None, not an empty set, when the frame carries no usable
+    pointables for this hand (older protocol versions omit them, or none
+    reported the "extended" flag). callers must treat None as "can't tell"
+    and not as "no fingers extended", otherwise every frame would look like a
+    fist. an empty set means pointables were present and all fingers curled.
+    """
+    hand_id = hand.get("id")
+    extended: set[int] = set()
+    saw_flag = False
+    for p in frame.get("pointables", []):
+        if p.get("handId") != hand_id:
+            continue
+        finger_type = p.get("type")
+        is_extended = p.get("extended")
+        if finger_type is None or is_extended is None:
+            continue
+        saw_flag = True
+        if is_extended:
+            extended.add(finger_type)
+    return extended if saw_flag else None
+
+
 def pick_hand(frame: dict, preferred_hand: str) -> dict | None:
     """
     pull the hand we care about out of a frame dict, or None if it's not

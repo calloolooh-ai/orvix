@@ -7,7 +7,7 @@ pinch. see the comments in config.py for why each exists.
 from orvix.config import Settings
 from orvix.coord_mapper import TiltCoordMapper, make_mapper
 from orvix.gesture_interpreter import GestureInterpreter, GestureType
-from orvix.leap_client import fingertips_for_hand
+from orvix.leap_client import extended_fingers_for_hand, fingertips_for_hand
 
 FPS = 75.0
 DT = 1.0 / FPS
@@ -224,3 +224,23 @@ def test_fingertips_are_matched_to_the_right_hand():
 
 def test_fingertips_copes_with_a_frame_that_has_no_pointables():
     assert fingertips_for_hand({}, {"id": 1}) == {}
+
+
+def test_extended_fingers_reports_only_the_straight_ones_for_this_hand():
+    frame = {
+        "pointables": [
+            {"handId": 1, "type": 0, "extended": True},
+            {"handId": 1, "type": 1, "extended": False},
+            {"handId": 1, "type": 2, "extended": True},
+            {"handId": 99, "type": 3, "extended": True},  # other hand
+        ]
+    }
+    assert extended_fingers_for_hand(frame, {"id": 1}) == {0, 2}
+
+
+def test_extended_fingers_is_none_when_frame_has_no_extension_data():
+    # no pointables at all, and pointables that omit the flag, both mean
+    # "can't tell" rather than "nothing extended"
+    assert extended_fingers_for_hand({}, {"id": 1}) is None
+    frame = {"pointables": [{"handId": 1, "type": 0, "tipPosition": [1, 2, 3]}]}
+    assert extended_fingers_for_hand(frame, {"id": 1}) is None

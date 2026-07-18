@@ -51,6 +51,37 @@ CURSOR_MODE_LABELS = {
     "absolute": "Absolute (point at it)",
 }
 
+# how strict "grab" is about the hand being a real closed fist. each choice
+# maps to a (grab_require_fist, grab_fist_max_extended) pair. keys are stable
+# ids used for matching the current settings back to a menu item.
+FIST_CHOICES = ["off", "strict", "thumb", "loose"]
+FIST_LABELS = {
+    "off": "Off (any curl grabs)",
+    "strict": "Strict (full fist)",
+    "thumb": "Forgive thumb",
+    "loose": "Loose (2 fingers ok)",
+}
+FIST_SETTINGS = {
+    # id -> (require_fist, max_extended). max_extended is ignored when
+    # require_fist is False but kept sane so toggling back on is predictable.
+    "off": (False, 1),
+    "strict": (True, 0),
+    "thumb": (True, 1),
+    "loose": (True, 2),
+}
+
+
+def _fist_choice_for(settings: Settings) -> str:
+    """which FIST_CHOICES id matches the current settings, for the checkmark."""
+    if not settings.grab_require_fist:
+        return "off"
+    for choice in ("strict", "thumb", "loose"):
+        if FIST_SETTINGS[choice][1] == settings.grab_fist_max_extended:
+            return choice
+    # a custom max_extended set outside the GUI: don't force a checkmark onto
+    # a choice that doesn't actually match it
+    return ""
+
 
 class _MainThreadInvoker(NSObject):
     """
@@ -185,6 +216,12 @@ class OrvixApp(rumps.App):
                 rumps.MenuItem(CURSOR_MODE_LABELS[mode], callback=self._make_mode_setter(mode))
             )
 
+        self.fist_menu = rumps.MenuItem("Grab needs a fist...")
+        for choice in FIST_CHOICES:
+            self.fist_menu.add(
+                rumps.MenuItem(FIST_LABELS[choice], callback=self._make_fist_setter(choice))
+            )
+
         self._refresh_action_checkmarks()
 
         self.menu = [
@@ -197,6 +234,7 @@ class OrvixApp(rumps.App):
             self.mode_menu,
             self.pinch_menu,
             self.grab_menu,
+            self.fist_menu,
             None,
             rumps.MenuItem("Calibrate...", callback=self._calibrate),
             None,
@@ -258,6 +296,19 @@ class OrvixApp(rumps.App):
 
         return _set
 
+    def _make_fist_setter(self, choice: str):
+        def _set(sender: rumps.MenuItem) -> None:
+            require, max_extended = FIST_SETTINGS[choice]
+            self.settings.grab_require_fist = require
+            self.settings.grab_fist_max_extended = max_extended
+            save_config(self.settings)
+            self._refresh_action_checkmarks()
+            # this one takes effect on the next frame the interpreter reads,
+            # no pipeline restart needed: it's read live from settings inside
+            # process_hand rather than baked in at start like the mapper.
+
+        return _set
+
     def _refresh_action_checkmarks(self) -> None:
         for item in self.pinch_menu.values():
             item.state = ACTION_LABELS[self.settings.pinch_action] == item.title
@@ -265,6 +316,9 @@ class OrvixApp(rumps.App):
             item.state = ACTION_LABELS[self.settings.grab_action] == item.title
         for item in self.mode_menu.values():
             item.state = CURSOR_MODE_LABELS.get(self.settings.cursor_mode) == item.title
+        active_fist = _fist_choice_for(self.settings)
+        for item in self.fist_menu.values():
+            item.state = FIST_LABELS.get(active_fist) == item.title
 
     def _calibrate(self, sender: rumps.MenuItem) -> None:
         if self.worker.running:

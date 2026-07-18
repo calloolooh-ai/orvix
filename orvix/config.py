@@ -164,6 +164,16 @@ class Settings:
 
     grab_threshold: float = 0.85
     grab_release_threshold: float = 0.6
+    # require a real closed fist to start a grab, not just a high grabStrength.
+    # leapd reports grabStrength high even for a loose partial curl, which
+    # made grab fire before the hand was actually closed. when this is on we
+    # also check the finger "extended" flags and only start a grab if at most
+    # grab_fist_max_extended fingers are still out. defaults to 1 to forgive
+    # the thumb, which often reads as extended even in a clenched fist.
+    # if the frame carries no finger-extension data we can't verify the fist
+    # and fall back to grabStrength alone, so grab still works.
+    grab_require_fist: bool = True
+    grab_fist_max_extended: int = 1
 
     # what the pinch and grab gestures actually do to the mouse. one of
     # "click" (down/drag/up -> mouse_down/drag_to/mouse_up) or "scroll"

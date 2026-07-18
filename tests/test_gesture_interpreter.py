@@ -135,6 +135,30 @@ def test_grab_emits_start_then_scroll_then_end():
     assert events[0].type == GestureType.GRAB_END
 
 
+def test_high_grab_strength_without_fist_does_not_start_grab():
+    # fingers still out (index + middle extended) means it's a partial curl,
+    # not a fist, so grab must not fire even though grabStrength is high
+    interpreter = GestureInterpreter(Settings())
+    events = interpreter.process_hand(make_hand(grab=0.9), extended_fingers={1, 2})
+    types = [e.type for e in events]
+    assert GestureType.GRAB_START not in types
+
+
+def test_closed_fist_starts_grab():
+    # only the thumb left out (within grab_fist_max_extended default of 1)
+    interpreter = GestureInterpreter(Settings())
+    events = interpreter.process_hand(make_hand(grab=0.9), extended_fingers={0})
+    assert events[0].type == GestureType.GRAB_START
+
+
+def test_grab_falls_back_to_strength_when_no_extension_data():
+    # None means the frame carried no finger-extension flags; grab should
+    # still work off grabStrength alone rather than becoming impossible
+    interpreter = GestureInterpreter(Settings())
+    events = interpreter.process_hand(make_hand(grab=0.9), extended_fingers=None)
+    assert events[0].type == GestureType.GRAB_START
+
+
 def test_hand_lost_closes_out_open_pinch():
     interpreter = GestureInterpreter(Settings())
     interpreter.process_hand(make_hand(pinch=0.9))  # PINCH_DOWN

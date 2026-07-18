@@ -98,8 +98,27 @@ class GestureInterpreter:
 
         return self._distance(thumb, middle) < self._distance(thumb, index)
 
+    def _is_fist(self, extended_fingers: set[int] | None) -> bool:
+        """
+        is the hand actually clenched into a fist right now?
+
+        grabStrength alone reads high for a loose partial curl, so when
+        grab_require_fist is on we also insist that few enough fingers are
+        still extended. if the frame gave us no finger-extension data
+        (extended_fingers is None) we can't check, and fall back to trusting
+        grabStrength so grab doesn't silently stop working.
+        """
+        if not self._settings.grab_require_fist:
+            return True
+        if extended_fingers is None:
+            return True
+        return len(extended_fingers) <= self._settings.grab_fist_max_extended
+
     def process_hand(
-        self, hand: dict | None, fingertips: dict[int, tuple[float, float, float]] | None = None
+        self,
+        hand: dict | None,
+        fingertips: dict[int, tuple[float, float, float]] | None = None,
+        extended_fingers: set[int] | None = None,
     ) -> list[GestureEvent]:
         """
         feed this one hand dict per frame (or None if the hand isn't
@@ -110,6 +129,11 @@ class GestureInterpreter:
         leap_client.fingertips_for_hand) is optional and only used to tell a
         middle-finger pinch from an index one for right clicks. everything
         else works without it.
+
+        extended_fingers (the set of finger types currently straight, from
+        leap_client.extended_fingers_for_hand, or None if the frame didn't
+        report it) is optional and only used to require a real closed fist
+        before starting a grab. see Settings.grab_require_fist.
         """
         if hand is None:
             return self._handle_hand_lost()
@@ -149,7 +173,7 @@ class GestureInterpreter:
                 )
             return events
 
-        if grab_strength >= self._settings.grab_threshold:
+        if grab_strength >= self._settings.grab_threshold and self._is_fist(extended_fingers):
             self._grabbing = True
             events.append(GestureEvent(GestureType.GRAB_START, palm_position))
             return events

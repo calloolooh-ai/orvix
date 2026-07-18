@@ -27,6 +27,7 @@ from orvix.gesture_interpreter import GestureEvent, GestureInterpreter, GestureT
 from orvix.coord_mapper import Mapper, TiltCoordMapper, make_mapper
 from orvix.leap_client import (
     LeapConnectionError,
+    extended_fingers_for_hand,
     fingertips_for_hand,
     pick_hand,
     stream_latest_frames,
@@ -163,7 +164,13 @@ async def run_live(
             # one for right clicks, so don't bother digging them out if the
             # hand's gone
             fingertips = fingertips_for_hand(frame, hand) if hand is not None else None
-            events = interpreter.process_hand(hand, fingertips)
+            # finger-extension flags let the interpreter insist on a real
+            # closed fist before starting a grab, rather than firing on a
+            # loose partial curl that still reads high grabStrength
+            extended_fingers = (
+                extended_fingers_for_hand(frame, hand) if hand is not None else None
+            )
+            events = interpreter.process_hand(hand, fingertips, extended_fingers)
 
             for event in events:
                 if verbose:
