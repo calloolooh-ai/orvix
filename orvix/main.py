@@ -164,7 +164,8 @@ def _fire_radial(
     settings: Settings,
     now: float,
     on_radial: RadialListener | None = None,
-) -> None:
+    anchor: tuple[float, float] | None = None,
+) -> tuple[float, float] | None:
     """
     drive the open radial menu for one frame from the raw hand, bypassing the
     normal cursor pipeline (while the wheel is up the hand is steering the
@@ -172,16 +173,31 @@ def _fire_radial(
     mapper on close so a relative-mode anchor doesn't lurch the cursor when
     normal control resumes. on_radial, if given, gets the live wheel state for
     the overlay each frame, and None on the frame it closes.
+
+    the wheel is always drawn at screen centre (radial.center), but the raw
+    mapper position generally isn't anywhere near there -- it's wherever the
+    cursor mapping puts your hand. `anchor` is that raw mapped position from
+    the moment the wheel opened; subtracting it out and adding it onto
+    radial.center turns "how far the hand moved since opening" into an offset
+    from the fixed centre, so pointing at a wedge still feels like pointing,
+    just re-based off the middle of the screen. returns the anchor to carry
+    into the next frame (None once the wheel's closed, so the caller drops it).
     """
     if hand is None:
         radial.cancel()
         mapper.reset()
         if on_radial is not None:
             on_radial(None)
-        return
+        return None
 
     palm = tuple(hand["palmPosition"])
-    pointer = mapper.map_to_screen(palm, now)
+    raw = mapper.map_to_screen(palm, now)
+    if anchor is None:
+        # shouldn't normally happen (open() always sets one), but guards
+        # against a stray call without one rather than pointing from (0, 0)
+        anchor = raw
+    cx, cy = radial.center
+    pointer = (cx + (raw[0] - anchor[0]), cy + (raw[1] - anchor[1]))
     pinching = hand.get("pinchStrength", 0.0) >= settings.pinch_threshold
     upd = radial.update(pointer, pinching, now)
 
@@ -195,8 +211,11 @@ def _fire_radial(
         mapper.reset()
         if on_radial is not None:
             on_radial(None)
-    elif on_radial is not None:
+        return None
+
+    if on_radial is not None:
         on_radial(_radial_state(radial, upd.hovered_index, upd.dwell_progress))
+    return anchor
 
 
 def _build_extras(settings: Settings) -> ExtraGestures:
@@ -329,6 +348,15 @@ async def run_live(
     # when the countdown ends rather than a None every idle frame
     dwell_shown = False
 
+    # the mapper's screen position for the hand at the moment the wheel
+    # opened. the wheel is always drawn dead centre now (see the circle-open
+    # block below), but wedge selection still needs to feel like pointing:
+    # this anchor lets _fire_radial turn "how far the hand has moved since
+    # opening" into an offset from that fixed centre, same relative feel as
+    # before, just re-based off the middle of the screen instead of wherever
+    # the cursor happened to be.
+    radial_anchor: tuple[float, float] | None = None
+
     try:
         # latest-frame-wins: if a CGEventPost stall puts us behind, skip the
         # frames that piled up rather than replaying stale hand positions
@@ -340,7 +368,9 @@ async def run_live(
             # and pinch/dwell to pick. skip the normal cursor pipeline so we
             # don't also move the cursor or click underneath the wheel.
             if radial.is_open:
-                _fire_radial(radial, hand, mapper, mouse, settings, now, on_radial)
+                radial_anchor = _fire_radial(
+                    radial, hand, mapper, mouse, settings, now, on_radial, radial_anchor
+                )
                 continue
 
             # fingertips are only needed to tell an index pinch from a middle
@@ -399,6 +429,7 @@ async def run_live(
             if settings.radial_menu_enabled and hand is not None and not zoom_active:
                 palm = hand["palmPosition"]
                 if circle.feed(palm[0], palm[2], now):
+                    radial_anchor = mapper.map_to_screen(tuple(palm), now)
                     center = (screen_width / 2, screen_height / 2)
                     radial.open(center, now)
                     if on_radial is not None:

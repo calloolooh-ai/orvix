@@ -52,12 +52,23 @@ def test_fire_radial_posts_the_wedge_keystroke_on_pinch():
 
     center = (500.0, 500.0)
     menu.open(center, now=0.0)
+    # _fire_radial re-bases the raw mapped hand position onto radial.center
+    # using the anchor from the moment the wheel opened (see main.py); passing
+    # the same point here as the anchor means the raw palm position IS the
+    # pointer directly, same as before that re-basing existed.
+    anchor = center
 
     # wedge 4 ("copy") sits straight down from center; point there and pinch
     below = (500, 500 + 120)
-    _fire_radial(menu, hand_at(*below, pinch=0.0), mapper, mouse, settings, now=0.0)
+    _fire_radial(menu, hand_at(*below, pinch=0.0), mapper, mouse, settings, now=0.0, anchor=anchor)
     _fire_radial(
-        menu, hand_at(*below, pinch=settings.pinch_threshold + 0.1), mapper, mouse, settings, now=0.05
+        menu,
+        hand_at(*below, pinch=settings.pinch_threshold + 0.1),
+        mapper,
+        mouse,
+        settings,
+        now=0.05,
+        anchor=anchor,
     )
 
     assert RADIAL_SHORTCUTS["copy"].keycode in [k for k, _ in mouse.keys]
@@ -83,11 +94,13 @@ def test_fire_radial_dwell_fires_without_a_pinch():
     mouse = FakeMouse()
     mapper = IdentityMapper()
     menu = RadialMenu(settings.radial_actions, dwell_seconds=0.6)
-    menu.open((500.0, 500.0), now=0.0)
+    center = (500.0, 500.0)
+    menu.open(center, now=0.0)
+    anchor = center  # see the comment in the pinch test above
 
     up = (500, 500 - 120)  # wedge 0 = "mission_control"
-    _fire_radial(menu, hand_at(*up), mapper, mouse, settings, now=0.0)
-    _fire_radial(menu, hand_at(*up), mapper, mouse, settings, now=0.3)
-    _fire_radial(menu, hand_at(*up), mapper, mouse, settings, now=0.7)
+    _fire_radial(menu, hand_at(*up), mapper, mouse, settings, now=0.0, anchor=anchor)
+    _fire_radial(menu, hand_at(*up), mapper, mouse, settings, now=0.3, anchor=anchor)
+    _fire_radial(menu, hand_at(*up), mapper, mouse, settings, now=0.7, anchor=anchor)
 
     assert RADIAL_SHORTCUTS["mission_control"].keycode in [k for k, _ in mouse.keys]
