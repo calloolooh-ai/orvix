@@ -5,6 +5,8 @@
 #   orvix              launch the menu bar app (default)
 #   orvix cli          run the cli live instead of the menu bar
 #   orvix cli --dry-run    ...any main.py flag works after `cli`
+#   orvix viz          full-screen "energy field" hand visualizer (no cursor control)
+#   orvix hand         full-screen rendered-hand skeleton visualizer (no cursor control)
 #   orvix calibrate    run the terminal calibration flow
 #   orvix status       check leapd/device/config without launching anything
 #
@@ -102,6 +104,16 @@ PY
         shift
         exec "$PYTHON" -m orvix.main "$@"
         ;;
+    viz)
+        require_leapd
+        echo "orvix: opening the energy-field visualizer. wave your hand over the sensor."
+        exec "$PYTHON" -m orvix.handviz
+        ;;
+    hand)
+        require_leapd
+        echo "orvix: opening the rendered-hand visualizer. hold your hand over the sensor."
+        exec "$PYTHON" -m orvix.handrender
+        ;;
     gui)
         require_leapd
         echo "orvix: starting the menu bar app, look for the hand icon up top."
@@ -112,7 +124,7 @@ PY
         sed -n '3,9p' "$SOURCE" | sed 's/^# \{0,1\}//'
         ;;
     *)
-        echo "orvix: dunno what '$cmd' means. try: orvix [gui|cli|calibrate|status|help]" >&2
+        echo "orvix: dunno what '$cmd' means. try: orvix [gui|cli|viz|hand|calibrate|status|help]" >&2
         exit 1
         ;;
 esac

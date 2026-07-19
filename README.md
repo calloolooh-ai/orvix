@@ -56,6 +56,8 @@ then from anywhere:
 ```
 orvix              # menu bar app
 orvix cli          # cli instead, takes any main.py flag (--dry-run, --verbose)
+orvix viz          # full-screen "energy field" hand visualizer (see below)
+orvix hand         # full-screen rendered-hand skeleton visualizer (see below)
 orvix calibrate    # terminal calibration flow
 orvix status       # check leapd + device + config, launches nothing
 ```
@@ -63,6 +65,15 @@ orvix status       # check leapd + device + config, launches nothing
 `orvix` doesn't start leapd, and doesn't need to: leapd installs as a LaunchDaemon with `KeepAlive=true`, so launchd already keeps it alive at boot. the launcher just checks it's up and tells you how to kick it if it isn't.
 
 whichever terminal you launch from needs Accessibility + Input Monitoring, since macOS ties that permission to the launching app and silently drops the events (no error) if it's missing.
+
+## visualizers
+
+`orvix viz` and `orvix hand` are separate programs, not part of the cursor-control pipeline. each opens its own leapd connection and only ever draws a full-screen, click-through overlay, they never touch the mouse. leave the real pipeline (`orvix` / `orvix cli`) off entirely and either visualizer still works, since neither depends on it.
+
+- `orvix viz` — an "energy field" of ripples off your palm and fingertips, pure eye candy
+- `orvix hand` — an accurate rendered skeleton (real finger bones, palm, forearm) that moves across the screen the same way the real cursor would, using your calibration box
+
+Ctrl-C the terminal (or Cmd-Q) to close either one.
 
 ## gui
 
