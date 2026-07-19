@@ -23,7 +23,7 @@ KEY_F = 3
 KEY_C = 8
 KEY_V = 9
 KEY_Z = 6
-KEY_4 = 21
+KEY_3 = 20
 KEY_UP = 126
 
 MODIFIERS = ("cmd", "shift", "ctrl", "alt")
@@ -49,7 +49,10 @@ RADIAL_SHORTCUTS: dict[str, Shortcut] = {
     "undo": Shortcut(KEY_Z, ("cmd",)),
     "copy": Shortcut(KEY_C, ("cmd",)),
     "paste": Shortcut(KEY_V, ("cmd",)),
-    "screenshot": Shortcut(KEY_4, ("cmd", "shift")),
+    # cmd+shift+3 is a full-screen capture. deliberately not cmd+shift+4,
+    # which drops you into area-selection mode and waits for a drag -- no
+    # good for a one-shot gesture-fired shortcut.
+    "screenshot": Shortcut(KEY_3, ("cmd", "shift")),
 }
 
 # the default clockwise-from-top wedge layout, matching the overlay mock.
