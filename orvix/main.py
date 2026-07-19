@@ -392,12 +392,14 @@ async def run_live(
                     _dispatch(event, mapper, mouse, settings)
 
             # after normal dispatch, watch for a circle to open the wheel. uses
-            # the horizontal palm plane (x, z); a completed loop pops the menu
-            # centred on wherever the cursor currently is.
+            # the horizontal palm plane (x, z); a completed loop always pops
+            # the menu dead centre on screen, not wherever the cursor happened
+            # to be, so it's in the same predictable spot every time and never
+            # opens half off-screen near an edge.
             if settings.radial_menu_enabled and hand is not None and not zoom_active:
                 palm = hand["palmPosition"]
                 if circle.feed(palm[0], palm[2], now):
-                    center = mapper.map_to_screen(tuple(palm), now)
+                    center = (screen_width / 2, screen_height / 2)
                     radial.open(center, now)
                     if on_radial is not None:
                         on_radial(_radial_state(radial, None, 0.0))
