@@ -97,6 +97,15 @@ confusing failure mode if you don't know to check it.
 app. don't just re-run the script in the same window, the permission grant
 doesn't apply retroactively to an already-running process.
 
+macOS ties this grant to whatever process actually ran `python`, which is
+your terminal app when running from `orvix cli`/`orvix gui` -- so re-running
+from a *different* terminal app means granting all over again, and it shows
+up in the permissions list as "Terminal" or "iTerm", not "orvix", which is
+confusing. building the packaged app (`./scripts/build_app.sh`, see the
+README's "first run" section) sidesteps this entirely: the grant goes to
+orvix.app itself, shows up in the list as "orvix", and survives switching
+which terminal you'd otherwise have launched it from.
+
 ## step 6: python environment
 
 ```bash
