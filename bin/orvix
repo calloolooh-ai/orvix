@@ -9,6 +9,7 @@
 #   orvix hand         full-screen rendered-hand skeleton visualizer (no cursor control)
 #   orvix calibrate    run the terminal calibration flow
 #   orvix status       check leapd/device/config without launching anything
+#   orvix profile      synthetic filter lag/jitter + dispatch throughput report (no sensor needed)
 #
 # note this deliberately does NOT try to start leapd. leapd is installed as a
 # LaunchDaemon (/Library/LaunchDaemons/com.leapmotion.leapd.plist) with
@@ -99,6 +100,12 @@ PY
         require_leapd
         exec "$PYTHON" -m orvix.main --calibrate
         ;;
+    profile)
+        # synthetic, no leapd/sensor needed: measures the One Euro Filter's
+        # lag/jitter tradeoff and the dispatch path's per-frame CPU cost
+        # against fake generated movement, not a live hand
+        exec "$PYTHON" "$REPO/scripts/profile_pipeline.py"
+        ;;
     cli)
         require_leapd
         shift
@@ -124,7 +131,7 @@ PY
         sed -n '3,9p' "$SOURCE" | sed 's/^# \{0,1\}//'
         ;;
     *)
-        echo "orvix: dunno what '$cmd' means. try: orvix [gui|cli|viz|hand|calibrate|status|help]" >&2
+        echo "orvix: dunno what '$cmd' means. try: orvix [gui|cli|viz|hand|calibrate|status|profile|help]" >&2
         exit 1
         ;;
 esac

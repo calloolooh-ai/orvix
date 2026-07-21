@@ -258,6 +258,11 @@ class Settings:
     # of about 1px more wobble at rest (3.2 -> 4.2px, which is nothing on a
     # 3440px wide screen). min_cutoff stays at 1.0 because raising it adds
     # jitter without helping the start transient.
+    #
+    # those numbers were originally a one-off manual measurement; `orvix
+    # profile` (see orvix/perf.py) now reproduces the same lag-vs-jitter
+    # comparison as a rerunnable report, so re-tuning this doesn't mean
+    # re-deriving the methodology from scratch.
     one_euro_min_cutoff: float = 1.0
     one_euro_beta: float = 0.05
 
