@@ -161,6 +161,19 @@ everything still runs through the same `run_live()` in `orvix/main.py` the CLI u
 
 see `docs/SETUP.md` before you try to run anything, there's some driver install and macOS permission stuff you gotta do first or nothing will work.
 
+## profiling
+
+```
+orvix profile
+```
+
+reports the One Euro Filter's lag-vs-jitter tradeoff (see `one_euro_beta`
+in config.py) across a few beta values, plus the per-frame CPU cost of
+`GestureInterpreter` + `CoordMapper` against a 100fps budget. entirely
+synthetic (`orvix/perf.py`), no sensor or leapd needed -- rerun it after
+touching filter tuning or the dispatch path to see the actual effect
+instead of guessing.
+
 ## testing
 
 ```
