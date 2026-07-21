@@ -1,5 +1,7 @@
 # orvix
 
+[![tests](https://github.com/calloolooh-ai/orvix/actions/workflows/tests.yml/badge.svg)](https://github.com/calloolooh-ai/orvix/actions/workflows/tests.yml)
+
 control your mac's mouse with hand gestures using an og Leap Motion Controller (LM-010). no keyboard or trackpad needed, just your hand in the air above the sensor.
 
 ## what it does
@@ -158,3 +160,15 @@ everything still runs through the same `run_live()` in `orvix/main.py` the CLI u
 ## setup
 
 see `docs/SETUP.md` before you try to run anything, there's some driver install and macOS permission stuff you gotta do first or nothing will work.
+
+## testing
+
+```
+pip install -r requirements.txt
+python -m pytest -q
+```
+
+no leapd or real Leap Motion hardware needed: everything under `tests/` is
+scoped to pure logic and mocked-out hardware boundaries (each test file's
+docstring says what's out of scope and why). runs on every push/PR via
+GitHub Actions, see `.github/workflows/tests.yml`.
