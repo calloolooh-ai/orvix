@@ -5,13 +5,17 @@ pure and is the part that decides whether your cursor covers the screen, so
 it's worth pinning down.
 """
 
+import asyncio
+
 import pytest
 
+from orvix import calibration
 from orvix.calibration import (
     MIN_SAMPLES,
     CalibrationError,
     _percentile,
     build_box,
+    collect_range,
     describe_box,
 )
 
@@ -86,3 +90,70 @@ def test_describe_box_reports_the_span():
     box = build_box(sweep((-100.0, 100.0), (150.0, 400.0)), trim=0.0)
     text = describe_box(box)
     assert "200 x 250mm" in text
+
+
+# -- collect_range's on_sample hook, used by calibration_viz.py for live
+# visual feedback during the sweep --
+
+
+def _fake_stream(hand_positions):
+    """stand in for stream_frames: one frame per position, plus a couple of
+    no-hand frames mixed in to prove those get skipped rather than sampled."""
+
+    async def _gen(url=None):
+        for pos in hand_positions:
+            if pos is None:
+                yield {"hands": []}
+            else:
+                yield {"hands": [{"type": "right", "palmPosition": list(pos)}]}
+
+    return _gen
+
+
+@pytest.mark.asyncio
+async def test_on_sample_fires_once_per_captured_sample(monkeypatch):
+    positions = [(0.0, 100.0, 0.0), None, (10.0, 110.0, 0.0), (20.0, 120.0, 0.0)]
+    # calibration.py does `from orvix.leap_client import stream_frames`, so it
+    # holds its own bound reference; patching leap_client.stream_frames alone
+    # wouldn't touch it (and collect_range would silently try a real
+    # websocket connection to a leapd that isn't running in CI).
+    monkeypatch.setattr(calibration, "stream_frames", _fake_stream(positions))
+
+    seen = []
+    await collect_range("right", duration=999.0, on_sample=lambda x, y: seen.append((x, y)))
+
+    # the None frame must not produce a sample: 3 hand frames in, 3 calls out
+    assert seen == [(0.0, 100.0), (10.0, 110.0), (20.0, 120.0)]
+
+
+@pytest.mark.asyncio
+async def test_on_sample_is_optional(monkeypatch):
+    positions = [(0.0, 100.0, 0.0), (10.0, 110.0, 0.0)]
+    # calibration.py does `from orvix.leap_client import stream_frames`, so it
+    # holds its own bound reference; patching leap_client.stream_frames alone
+    # wouldn't touch it (and collect_range would silently try a real
+    # websocket connection to a leapd that isn't running in CI).
+    monkeypatch.setattr(calibration, "stream_frames", _fake_stream(positions))
+
+    # must not raise just because no callback was passed
+    samples = await collect_range("right", duration=999.0)
+    assert len(samples) == 2
+
+
+@pytest.mark.asyncio
+async def test_calibrate_threads_on_sample_through_to_collect_range(monkeypatch):
+    positions = [(float(i), 100.0 + i, 0.0) for i in range(150)]
+    # calibration.py does `from orvix.leap_client import stream_frames`, so it
+    # holds its own bound reference; patching leap_client.stream_frames alone
+    # wouldn't touch it (and collect_range would silently try a real
+    # websocket connection to a leapd that isn't running in CI).
+    monkeypatch.setattr(calibration, "stream_frames", _fake_stream(positions))
+
+    from orvix.config import Settings
+
+    seen = []
+    box = await calibration.calibrate(
+        Settings(), duration=999.0, on_sample=lambda x, y: seen.append((x, y))
+    )
+    assert len(seen) == 150
+    assert box.x_max > box.x_min

@@ -362,6 +362,183 @@ class DwellRingController:
             self._window.orderOut_(None)
 
 
+_HUD_W = 340.0
+_HUD_H = 220.0
+_HUD_PAD = 16.0  # inset between the window edge and the coverage box
+
+
+if _APPKIT_OK:
+
+    class _CalibrationHUDView(AppKit.NSView):
+        """
+        draws the growing coverage rectangle + current-position dot for the
+        live calibration sweep. state is a plain dict of the fractions
+        orvix.calibration_viz.coverage_rect()/marker_fraction() produce
+        (0..1, already reference-scaled), this view just maps them into its
+        own pixel box -- same split as the radial wheel, math stays in a
+        plain-python module and this only converts fractions to pixels.
+        """
+
+        def initWithFrame_(self, frame):
+            self = objc.super(_CalibrationHUDView, self).initWithFrame_(frame)
+            if self is None:
+                return None
+            self._rect = None  # (left, bottom, w, h) fractions, or None
+            self._marker = None  # (x, y) fractions, or None
+            self._fraction = 0.0
+            self._n_samples = 0
+            return self
+
+        @python_method
+        def set_state(self, rect, marker, fraction, n_samples):
+            self._rect = rect
+            self._marker = marker
+            self._fraction = float(fraction)
+            self._n_samples = int(n_samples)
+
+        def isFlipped(self):
+            return False
+
+        def drawRect_(self, _rect):
+            try:
+                self._draw()
+            except Exception:  # noqa: BLE001 - never let a draw error escape into Cocoa
+                logger.debug("calibration HUD draw failed", exc_info=True)
+
+        @python_method
+        def _draw(self):
+            box_w = _HUD_W - 2 * _HUD_PAD
+            box_h = _HUD_H - 2 * _HUD_PAD - 26.0  # leave room for the label row
+            box_origin = (_HUD_PAD, _HUD_PAD)
+
+            frame_path = AppKit.NSBezierPath.bezierPathWithRoundedRect_xRadius_yRadius_(
+                (box_origin, (box_w, box_h)), 8.0, 8.0
+            )
+            AppKit.NSColor.colorWithCalibratedWhite_alpha_(0.10, 0.9).set()
+            frame_path.fill()
+
+            if self._rect is not None:
+                left, bottom, w, h = self._rect
+                # a sliver so a zero-area single sample still shows *something*
+                px_w = max(3.0, w * box_w)
+                px_h = max(3.0, h * box_h)
+                fill_rect = (
+                    (box_origin[0] + left * box_w, box_origin[1] + bottom * box_h),
+                    (px_w, px_h),
+                )
+                fill_path = AppKit.NSBezierPath.bezierPathWithRoundedRect_xRadius_yRadius_(
+                    fill_rect, 3.0, 3.0
+                )
+                AppKit.NSColor.colorWithCalibratedRed_green_blue_alpha_(
+                    0.31, 0.55, 0.42, 0.55
+                ).set()
+                fill_path.fill()
+
+            if self._marker is not None:
+                mx, my = self._marker
+                cx = box_origin[0] + mx * box_w
+                cy = box_origin[1] + my * box_h
+                r = 5.0
+                dot = AppKit.NSBezierPath.bezierPathWithOvalInRect_(
+                    ((cx - r, cy - r), (2 * r, 2 * r))
+                )
+                AppKit.NSColor.whiteColor().set()
+                dot.fill()
+
+            self._draw_label(box_origin, box_h)
+
+        @python_method
+        def _draw_label(self, box_origin, box_h):
+            label = f"calibrating... {self._fraction * 100:3.0f}%  ({self._n_samples} samples)"
+            attrs = {
+                AppKit.NSFontAttributeName: AppKit.NSFont.systemFontOfSize_weight_(
+                    12.0, AppKit.NSFontWeightMedium
+                ),
+                AppKit.NSForegroundColorAttributeName: AppKit.NSColor.colorWithCalibratedWhite_alpha_(
+                    0.92, 1.0
+                ),
+            }
+            text = AppKit.NSString.stringWithString_(label)
+            text.drawAtPoint_withAttributes_((box_origin[0], box_origin[1] + box_h + 8.0), attrs)
+
+
+class CalibrationOverlayController:
+    """
+    shows/updates/hides the live calibration HUD, parked near the top of the
+    main screen while a sweep is running. same safe-no-op-without-AppKit
+    contract as OverlayController: calibration itself works with or without
+    this, it's purely the visual.
+    """
+
+    def __init__(self) -> None:
+        self._window = None
+        self._view = None
+        self._warned = False
+
+    @property
+    def available(self) -> bool:
+        return _APPKIT_OK
+
+    def render(self, state: dict | None) -> None:
+        """
+        state: {"rect": coverage_rect() result, "marker": marker_fraction()
+        result, "fraction": 0..1, "n_samples": int}, or None to hide.
+        main-thread only, same as OverlayController.
+        """
+        if not _APPKIT_OK:
+            return
+        try:
+            if state is None:
+                self._hide()
+            else:
+                self._show(state)
+        except Exception:  # noqa: BLE001 - visual only, must not disturb calibration
+            if not self._warned:
+                self._warned = True
+                logger.warning("calibration HUD failed to draw, running without it", exc_info=True)
+            else:
+                logger.debug("calibration HUD render failed", exc_info=True)
+
+    def _ensure_window(self) -> None:
+        if self._window is not None:
+            return
+        rect = ((0.0, 0.0), (_HUD_W, _HUD_H))
+        window = AppKit.NSWindow.alloc().initWithContentRect_styleMask_backing_defer_(
+            rect, AppKit.NSWindowStyleMaskBorderless, AppKit.NSBackingStoreBuffered, False
+        )
+        window.setOpaque_(False)
+        window.setBackgroundColor_(AppKit.NSColor.clearColor())
+        window.setLevel_(AppKit.NSStatusWindowLevel)
+        window.setIgnoresMouseEvents_(True)  # click-through, same reason as the radial wheel
+        window.setCollectionBehavior_(
+            AppKit.NSWindowCollectionBehaviorCanJoinAllSpaces
+            | AppKit.NSWindowCollectionBehaviorStationary
+        )
+        view = _CalibrationHUDView.alloc().initWithFrame_(rect)
+        window.setContentView_(view)
+        self._window = window
+        self._view = view
+
+        # parked top-center of the main screen, out of the way of the menu
+        # bar itself but somewhere you'll glance while sweeping your hand
+        screen = AppKit.NSScreen.mainScreen().frame()
+        origin_x = screen.origin.x + (screen.size.width - _HUD_W) / 2.0
+        origin_y = screen.origin.y + screen.size.height - _HUD_H - 60.0
+        window.setFrameOrigin_((origin_x, origin_y))
+
+    def _show(self, state: dict) -> None:
+        self._ensure_window()
+        self._view.set_state(
+            state.get("rect"), state.get("marker"), state.get("fraction", 0.0), state.get("n_samples", 0)
+        )
+        self._view.setNeedsDisplay_(True)
+        self._window.orderFrontRegardless()
+
+    def _hide(self) -> None:
+        if self._window is not None:
+            self._window.orderOut_(None)
+
+
 def _demo() -> None:
     """
     `python -m orvix.overlay` shows the wheel in the middle of the screen and

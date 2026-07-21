@@ -89,6 +89,27 @@ if macOS is reporting a sleeping/mirrored display as active and you don't
 want the cursor drifting toward it. this needs a restart of the pipeline to
 take effect, same as changing cursor mode.
 
+## first run
+
+the first time the menu bar app launches with no `~/.orvix/config.yaml` yet,
+it greets you and offers to jump straight into calibration instead of
+leaving you to find "Calibrate..." in the menu on your own while the cursor
+runs on rough guessed defaults. skip it and it won't ask again once any
+setting's been saved, calibrated or not; it's a one-time nudge, not a nag.
+
+## calibration feedback
+
+both the terminal flow (`orvix calibrate`) and the menu bar's "Calibrate..."
+now show your sweep happening live instead of just a percent-complete bar:
+
+- the terminal draws an ascii box that traces your actual swept range as you
+  move, so a lopsided sweep (all bunched to one side, or missing an axis) is
+  obvious while it's still running instead of only after `build_box` refuses
+  a too-narrow result
+- the menu bar shows the same idea as an on-screen HUD near the top of your
+  screen: a rectangle that fills in as you cover more of a typical range,
+  plus a dot for where your hand is right now
+
 ## gui
 
 `orvix` puts an icon in your menu bar. from there you can:
@@ -97,9 +118,10 @@ take effect, same as changing cursor mode.
 - toggle dry-run (logs intended actions instead of moving the real cursor)
 - remap what pinch and grab actually do: Click / Drag, Scroll, or Disabled
 - set how strict grab is about being a real fist
+- pin the cursor to just the main display instead of every active one
 - turn the radial menu on/off and set its dwell time
 - toggle any of the extra gestures (zoom, volume, dwell click, palms-out pause, thumbs-up)
-- run calibration
+- run calibration (with the live coverage HUD described above)
 - see the last gesture event live
 
 everything still runs through the same `run_live()` in `orvix/main.py` the CLI uses, so CLI and GUI behavior can't drift apart.

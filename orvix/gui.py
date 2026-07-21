@@ -29,11 +29,13 @@ import rumps
 from Foundation import NSObject
 
 from orvix import calibration
-from orvix.config import Settings, load_config, save_config
+from orvix.calibration_viz import BoundsTracker, coverage_rect, marker_fraction
+from orvix.config import DEFAULT_CONFIG_PATH, Settings, load_config, save_config
+from orvix import onboarding
 from orvix.gesture_interpreter import GestureEvent
 from orvix.leap_client import LeapConnectionError
 from orvix.main import run_live
-from orvix.overlay import DwellRingController, OverlayController
+from orvix.overlay import CalibrationOverlayController, DwellRingController, OverlayController
 
 logger = logging.getLogger("orvix.gui")
 
@@ -224,6 +226,10 @@ class OrvixApp(rumps.App):
     def __init__(self):
         super().__init__("orvix", title=ICON_IDLE, quit_button=None)
 
+        # captured before anything in this run could save a config, since
+        # is_first_run just checks whether the file exists yet at all
+        self._is_first_run = onboarding.is_first_run(DEFAULT_CONFIG_PATH)
+
         self.settings = load_config()
         self.dry_run = rumps.MenuItem("Dry Run (don't move real cursor)", callback=self._toggle_dry_run)
         self.dry_run.state = False
@@ -306,6 +312,8 @@ class OrvixApp(rumps.App):
         # AppKit isn't available.
         self.overlay = OverlayController()
         self.dwell_ring = DwellRingController()
+        # live coverage HUD shown while calibrating, see _run_calibration
+        self.calibration_overlay = CalibrationOverlayController()
 
         self.worker = PipelineWorker(
             on_event=self._handle_event,
@@ -320,9 +328,38 @@ class OrvixApp(rumps.App):
         # hand doesn't spam Cocoa with selector calls.
         self._last_event_ui_update = 0.0
         self._last_cal_ui_update = 0.0
+        self._last_cal_hud_update = 0.0
         self._event_ui_interval = 0.15
 
+        # set fresh at the start of each calibration run, see _run_calibration
+        self._cal_tracker: BoundsTracker | None = None
+        self._cal_fraction = 0.0
+        self._cal_n_samples = 0
+
+        # fires once NSApplication is actually up (rumps sets that up inside
+        # run(), not __init__), so an alert shown from here won't race a not-
+        # yet-initialized app. see _maybe_show_onboarding.
+        rumps.events.before_start.register(self._maybe_show_onboarding)
+
     # -- menu callbacks (always invoked on the main thread by rumps) --
+
+    def _maybe_show_onboarding(self) -> None:
+        """
+        first launch only (no ~/.orvix/config.yaml yet): greet, explain
+        calibration in one sentence, and offer to jump straight into it
+        instead of leaving a new user to discover "Calibrate..." on their
+        own with the rough guessed defaults driving the cursor meanwhile.
+        """
+        if not self._is_first_run:
+            return
+        choice = rumps.alert(
+            "welcome to orvix",
+            onboarding.WELCOME_MESSAGE,
+            ok=onboarding.CALIBRATE_NOW_LABEL,
+            cancel=onboarding.SKIP_FOR_NOW_LABEL,
+        )
+        if choice == 1:
+            self._calibrate(None)
 
     def _toggle_running(self, sender: rumps.MenuItem) -> None:
         if self.worker.running:
@@ -519,9 +556,17 @@ class OrvixApp(rumps.App):
         thread). drives calibration.calibrate(), same code the cli uses, and
         just renders the progress differently.
         """
+        self._cal_tracker = BoundsTracker()
+        self._cal_fraction = 0.0
+        self._cal_n_samples = 0
+
         try:
             box = asyncio.run(
-                calibration.calibrate(self.settings, on_progress=self._calibration_progress)
+                calibration.calibrate(
+                    self.settings,
+                    on_progress=self._calibration_progress,
+                    on_sample=self._calibration_sample,
+                )
             )
         except calibration.CalibrationError as exc:
             self._on_main_thread(self._end_calibration_ui)
@@ -549,10 +594,25 @@ class OrvixApp(rumps.App):
         # throttled for the same reason gesture events are, this fires per
         # frame at ~100/sec and the menu only needs to look alive
         now = time.monotonic()
+        self._cal_fraction = fraction
+        self._cal_n_samples = n_samples
         if fraction < 1.0 and now - self._last_cal_ui_update < self._event_ui_interval:
             return
         self._last_cal_ui_update = now
         self._on_main_thread(self._update_calibration_ui, fraction, n_samples)
+        self._on_main_thread(self._update_calibration_hud)
+
+    def _calibration_sample(self, x: float, y: float) -> None:
+        # runs on the calibration thread, same as _calibration_progress. the
+        # tracker itself is cheap to update every sample; it's only the
+        # AppKit redraw that's throttled, same reasoning as everywhere else
+        # in this file that touches Cocoa from a background callback.
+        self._cal_tracker.update(x, y)
+        now = time.monotonic()
+        if now - self._last_cal_hud_update < self._event_ui_interval:
+            return
+        self._last_cal_hud_update = now
+        self._on_main_thread(self._update_calibration_hud)
 
     def _update_calibration_ui(self, fraction: float, n_samples: int) -> None:
         filled = int(fraction * 10)
@@ -560,9 +620,24 @@ class OrvixApp(rumps.App):
         self.status_item.title = f"calibrating: [{bar}] {n_samples} samples"
         self.title = ICON_CALIBRATING
 
+    def _update_calibration_hud(self) -> None:
+        tracker = self._cal_tracker
+        if tracker is None:
+            return
+        self.calibration_overlay.render(
+            {
+                "rect": coverage_rect(tracker),
+                "marker": marker_fraction(tracker),
+                "fraction": self._cal_fraction,
+                "n_samples": self._cal_n_samples,
+            }
+        )
+
     def _end_calibration_ui(self) -> None:
         self.status_item.title = "status: stopped"
         self.title = ICON_IDLE
+        self.calibration_overlay.render(None)
+        self._cal_tracker = None
 
 
 def main() -> None:
