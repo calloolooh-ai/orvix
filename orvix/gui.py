@@ -36,6 +36,7 @@ from orvix.gesture_interpreter import GestureEvent
 from orvix.leap_client import LeapConnectionError
 from orvix.main import run_live
 from orvix.overlay import CalibrationOverlayController, DwellRingController, OverlayController
+from orvix.shortcuts import NAMED_SHORTCUT_LABELS
 
 logger = logging.getLogger("orvix.gui")
 
@@ -85,7 +86,7 @@ EXTRA_GESTURE_TOGGLES = [
     ("Fist-twist volume", "fist_twist_volume_enabled"),
     ("Dwell click", "dwell_click_enabled"),
     ("Palms-out pause", "palms_out_pause_enabled"),
-    ("Thumbs-up = Return", "thumbs_up_confirm_enabled"),
+    ("Thumbs-up confirm", "thumbs_up_confirm_enabled"),
 ]
 
 
@@ -284,6 +285,14 @@ class OrvixApp(rumps.App):
             item.state = bool(getattr(self.settings, attr))
             self.extras_menu.add(item)
 
+        # what a thumbs-up hold actually fires: any named shortcut, same
+        # table the radial wedges use, not just the original literal Return.
+        self.thumbs_menu = rumps.MenuItem("Thumbs-up does...")
+        for name, label in NAMED_SHORTCUT_LABELS.items():
+            self.thumbs_menu.add(
+                rumps.MenuItem(label, callback=self._make_thumbs_up_setter(name))
+            )
+
         self._refresh_action_checkmarks()
 
         self.menu = [
@@ -302,6 +311,7 @@ class OrvixApp(rumps.App):
             self.radial_toggle,
             self.dwell_menu,
             self.extras_menu,
+            self.thumbs_menu,
             None,
             rumps.MenuItem("Calibrate...", callback=self._calibrate),
             None,
@@ -413,6 +423,16 @@ class OrvixApp(rumps.App):
 
         return _set
 
+    def _make_thumbs_up_setter(self, name: str):
+        def _set(sender: rumps.MenuItem) -> None:
+            self.settings.thumbs_up_action = name
+            save_config(self.settings)
+            self._refresh_action_checkmarks()
+            # read live in _execute_extras every frame, no restart needed,
+            # same as radial_menu_enabled
+
+        return _set
+
     def _toggle_radial(self, sender: rumps.MenuItem) -> None:
         sender.state = not sender.state
         self.settings.radial_menu_enabled = bool(sender.state)
@@ -477,6 +497,9 @@ class OrvixApp(rumps.App):
         active_dwell = _dwell_label_for(self.settings)
         for item in self.dwell_menu.values():
             item.state = active_dwell == item.title
+        active_thumbs = NAMED_SHORTCUT_LABELS.get(self.settings.thumbs_up_action)
+        for item in self.thumbs_menu.values():
+            item.state = active_thumbs == item.title
 
     def _calibrate(self, sender: rumps.MenuItem) -> None:
         if self.worker.running:

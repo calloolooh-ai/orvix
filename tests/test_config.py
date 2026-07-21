@@ -31,3 +31,14 @@ def test_load_config_with_no_file_returns_defaults(tmp_path):
     path = tmp_path / "does_not_exist.yaml"
     loaded = load_config(path)
     assert loaded == Settings()
+
+
+def test_thumbs_up_action_defaults_to_confirm():
+    assert Settings().thumbs_up_action == "confirm"
+
+
+def test_save_then_load_round_trips_thumbs_up_action(tmp_path):
+    path = tmp_path / "config.yaml"
+    save_config(Settings(thumbs_up_action="undo"), path)
+    loaded = load_config(path)
+    assert loaded.thumbs_up_action == "undo"

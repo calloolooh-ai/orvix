@@ -219,7 +219,7 @@ class Settings:
     #             scroll, which reads vertical motion instead of twist)
     #  - dwell:   rest the cursor still to left-click, hands-free
     #  - pause:   hold both open palms out ("stop") to suspend/resume orvix
-    #  - confirm: hold a thumbs-up to press Return
+    #  - confirm: hold a thumbs-up to fire thumbs_up_action (Return by default)
     zoom_enabled: bool = True
     fist_twist_volume_enabled: bool = True
     dwell_click_enabled: bool = True
@@ -235,6 +235,13 @@ class Settings:
     dwell_click_seconds: float = 1.5
     pause_hold_seconds: float = 0.6
     confirm_hold_seconds: float = 0.5
+    # which shortcut a thumbs-up hold fires, a key into
+    # shortcuts.NAMED_SHORTCUTS. defaults to Return since that's the
+    # original v1 behavior (a literal "confirm"), but it's just another
+    # named shortcut now, same table the radial wedges pick from, so it's
+    # remappable to anything else in there (e.g. cmd+z if you'd rather
+    # thumbs-up mean "undo").
+    thumbs_up_action: str = "confirm"
 
     # One Euro Filter params, see one_euro_filter.py for the actual math.
     #

@@ -21,7 +21,7 @@ on top of the core set, these can each be toggled in the menu bar (under More ge
 - **make a fist and twist your wrist** like a knob to change volume
 - **hold the cursor still** for a beat to left-click, no pinch needed (dwell click)
 - **hold both palms out** like a stop sign to pause orvix, do it again to resume
-- **hold a thumbs-up** to press Return
+- **hold a thumbs-up** to fire a shortcut, Return by default -- remappable in the menu bar ("Thumbs-up does...") or `thumbs_up_action` in config, to anything the radial wedges can do (Mission Control, Maximize, App Switcher, Undo, Copy, Paste, Screenshot)
 
 the cursor freezes the moment you start closing your fingers, so the click lands where you aimed instead of sliding off as your palm shifts. that drift is the classic hand-tracking-cursor problem and most projects never fix it.
 
@@ -117,6 +117,7 @@ now show your sweep happening live instead of just a percent-complete bar:
 - start/stop the live pipeline
 - toggle dry-run (logs intended actions instead of moving the real cursor)
 - remap what pinch and grab actually do: Click / Drag, Scroll, or Disabled
+- remap what a thumbs-up hold fires: Return, or any of the radial menu's shortcuts
 - set how strict grab is about being a real fist
 - pin the cursor to just the main display instead of every active one
 - turn the radial menu on/off and set its dwell time

@@ -67,5 +67,29 @@ DEFAULT_RADIAL_ACTIONS: list[str] = [
     "close",
 ]
 
-# thumbs-up (gesture 13) confirms; it's just Return with no modifiers.
+# thumbs-up (gesture 13) confirms by default; it's just Return with no
+# modifiers. kept as its own name (not folded only into NAMED_SHORTCUTS)
+# since it's still the hardcoded fallback if a saved thumbs_up_action name
+# doesn't resolve (see main.py's _execute_extras).
 CONFIRM_SHORTCUT = Shortcut(KEY_RETURN)
+
+# every shortcut orvix knows how to fire, by name: the radial wedges plus
+# "confirm". this is the single namespace gesture bindings choose from --
+# right now that's just settings.thumbs_up_action, but it exists as one
+# shared table (rather than a separate one per bindable gesture) so a new
+# bindable gesture in the future has somewhere to point without inventing
+# its own list of options.
+NAMED_SHORTCUTS: dict[str, Shortcut] = {**RADIAL_SHORTCUTS, "confirm": CONFIRM_SHORTCUT}
+
+# human labels for NAMED_SHORTCUTS, for menus. "confirm" reads as "Return"
+# since that's what it actually presses, not what any gesture calls it.
+NAMED_SHORTCUT_LABELS: dict[str, str] = {
+    "mission_control": "Mission Control",
+    "maximize": "Maximize",
+    "app_switcher": "App Switcher",
+    "undo": "Undo",
+    "copy": "Copy",
+    "paste": "Paste",
+    "screenshot": "Screenshot",
+    "confirm": "Return",
+}
