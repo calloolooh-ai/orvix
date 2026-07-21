@@ -14,10 +14,14 @@ first, then see scripts/build_app.sh.
 
 everything below module level is plain data on purpose (no argv-dependent
 code outside the __main__ guard), so tests can `import setup` and check the
-bundle config without triggering an actual build.
+bundle config without triggering an actual build -- and without needing
+setuptools installed at all, which a bare `pip install -r requirements.txt`
+doesn't include (only requirements-build.txt does). that's why the
+setuptools import itself is deferred into the __main__ guard below rather
+than sitting at module level: a plain CI test run (see
+.github/workflows/tests.yml) installs only requirements.txt and would fail
+to even collect this file's test otherwise.
 """
-
-from setuptools import setup
 
 APP = ["orvix/gui.py"]
 DATA_FILES = []
@@ -76,6 +80,8 @@ OPTIONS = {
 }
 
 if __name__ == "__main__":
+    from setuptools import setup
+
     setup(
         app=APP,
         data_files=DATA_FILES,

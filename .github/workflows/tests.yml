@@ -1,0 +1,34 @@
+name: tests
+
+# runs the pytest suite on every push and PR. no leapd/real Leap Motion
+# hardware in CI, obviously -- everything under tests/ is already scoped to
+# pure logic and mocked-out hardware boundaries for exactly this reason (see
+# each test file's docstring for what's out of scope and why). macOS-only
+# runner since the whole dependency chain (pyobjc/Quartz/AppKit, rumps) is
+# macOS-only, same as orvix itself.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          # matches the dev venv this suite was last verified against;
+          # bump deliberately, not by drifting with whatever "latest" means
+          # on a given day
+          python-version: "3.14"
+
+      - name: install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: run tests
+        run: python -m pytest -q
