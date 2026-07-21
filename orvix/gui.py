@@ -254,6 +254,15 @@ class OrvixApp(rumps.App):
                 rumps.MenuItem(FIST_LABELS[choice], callback=self._make_fist_setter(choice))
             )
 
+        # let the cursor roam onto every active display, not just the main
+        # one. built once when the pipeline starts (see main.py's
+        # get_desktop_bounds call), so flipping this restarts the pipeline
+        # like cursor mode does.
+        self.multi_monitor_toggle = rumps.MenuItem(
+            "Use all displays", callback=self._toggle_multi_monitor
+        )
+        self.multi_monitor_toggle.state = self.settings.multi_monitor
+
         # gesture 12: circle to open the radial menu; pick a wedge by pinch or dwell
         self.radial_toggle = rumps.MenuItem(
             "Radial menu (circle to open)", callback=self._toggle_radial
@@ -282,6 +291,7 @@ class OrvixApp(rumps.App):
             self.pinch_menu,
             self.grab_menu,
             self.fist_menu,
+            self.multi_monitor_toggle,
             None,
             self.radial_toggle,
             self.dwell_menu,
@@ -342,6 +352,18 @@ class OrvixApp(rumps.App):
                 self.worker.start(self.settings, dry_run=dry_run)
 
         return _set
+
+    def _toggle_multi_monitor(self, sender: rumps.MenuItem) -> None:
+        sender.state = not sender.state
+        self.settings.multi_monitor = bool(sender.state)
+        save_config(self.settings)
+
+        # same reason as cursor mode: desktop bounds are read once when the
+        # pipeline starts, so the change is invisible until it restarts.
+        if self.worker.running:
+            dry_run = bool(self.dry_run.state)
+            self.worker.stop(wait=True)
+            self.worker.start(self.settings, dry_run=dry_run)
 
     def _make_action_setter(self, family: str, action: str):
         def _set(sender: rumps.MenuItem) -> None:

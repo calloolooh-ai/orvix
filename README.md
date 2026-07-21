@@ -75,6 +75,20 @@ whichever terminal you launch from needs Accessibility + Input Monitoring, since
 
 Ctrl-C the terminal (or Cmd-Q) to close either one.
 
+## multi-monitor
+
+by default the cursor can travel across every active display, not just the
+main one: orvix works out the bounding box of your whole desktop (via
+`CGGetActiveDisplayList`) and maps hand movement onto that instead of a
+single screen's pixels. this only changes where the *edges* are; it doesn't
+change how any cursor mode works otherwise.
+
+set `multi_monitor: false` in `~/.orvix/config.yaml` (or toggle "Use all
+displays" in the menu bar) to pin the cursor to just the main display, e.g.
+if macOS is reporting a sleeping/mirrored display as active and you don't
+want the cursor drifting toward it. this needs a restart of the pipeline to
+take effect, same as changing cursor mode.
+
 ## gui
 
 `orvix` puts an icon in your menu bar. from there you can:

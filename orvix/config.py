@@ -265,6 +265,19 @@ class Settings:
 
     target_fps: int = 100
 
+    # when true, the cursor can travel across every active display, not just
+    # the main one: the mapper works over the bounding box of the whole
+    # desktop (see displays.py) instead of just the main screen's pixels.
+    # absolute mode still calibrates against whatever the calibration box
+    # says, it's relative/tilt mode that benefits most since they had no
+    # screen-size concept to update in the first place.
+    #
+    # off by default is wrong for most setups so it defaults on; the escape
+    # hatch exists for single-monitor users who'd rather the cursor never
+    # drifts toward a display they don't use (e.g. a sleeping/mirrored one
+    # macOS still reports as active).
+    multi_monitor: bool = True
+
 
 def load_config(path: Path = DEFAULT_CONFIG_PATH) -> Settings:
     """
