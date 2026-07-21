@@ -9,6 +9,10 @@ env/
 .pytest_cache/
 .mypy_cache/
 
+# py2app build output (scripts/build_app.sh), rebuild locally with that script
+build/
+dist/
+
 # editor/os junk
 .DS_Store
 .vscode/

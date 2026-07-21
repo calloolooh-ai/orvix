@@ -66,6 +66,26 @@ orvix status       # check leapd + device + config, launches nothing
 
 whichever terminal you launch from needs Accessibility + Input Monitoring, since macOS ties that permission to the launching app and silently drops the events (no error) if it's missing.
 
+## building the app
+
+`orvix cli`/`orvix gui` run out of a terminal, which means the Accessibility/
+Input Monitoring grant goes to *that terminal app*, not to orvix -- switch
+terminals and you're granting it all over again (see docs/SETUP.md step 5).
+
+to build a real `orvix.app` instead, so the grant goes to orvix itself and
+it can run without a terminal at all:
+
+```
+pip install -r requirements-build.txt   # py2app, build-only, not needed day to day
+./scripts/build_app.sh
+open dist/orvix.app                     # or drag it to /Applications
+```
+
+it's a menu-bar-only app (no Dock icon, no Cmd-Tab entry), same as running
+`orvix gui` from a terminal, and drives the exact same `run_live()` pipeline
+-- packaging changes nothing about behavior, only how permissions and
+launching work.
+
 ## visualizers
 
 `orvix viz` and `orvix hand` are separate programs, not part of the cursor-control pipeline. each opens its own leapd connection and only ever draws a full-screen, click-through overlay, they never touch the mouse. leave the real pipeline (`orvix` / `orvix cli`) off entirely and either visualizer still works, since neither depends on it.

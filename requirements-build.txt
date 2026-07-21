@@ -1,0 +1,5 @@
+# only needed to build the distributable orvix.app (see scripts/build_app.sh
+# and setup.py). not needed to run or develop orvix day to day, so it's kept
+# out of requirements.txt.
+
+py2app>=0.28
