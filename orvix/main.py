@@ -34,7 +34,7 @@ from orvix.leap_client import (
 from orvix.mouse_control import DryRunMouseController, MouseController, QuartzMouseController
 from orvix.circle_detector import CircleDetector
 from orvix.radial_menu import RadialMenu, RadialOutcome
-from orvix.shortcuts import CONFIRM_SHORTCUT, RADIAL_SHORTCUTS
+from orvix.shortcuts import CONFIRM_SHORTCUT, NAMED_SHORTCUTS, RADIAL_SHORTCUTS
 from orvix.extra_gestures import (
     ExtraAction,
     ExtraGestures,
@@ -289,7 +289,13 @@ def _execute_extras(
         elif action == ExtraAction.DWELL_CLICK:
             mouse.click()
         elif action == ExtraAction.CONFIRM:
-            mouse.key_shortcut(CONFIRM_SHORTCUT.keycode, CONFIRM_SHORTCUT.mods)
+            # thumbs_up_action is a name into shortcuts.NAMED_SHORTCUTS, same
+            # table the radial wedges use, so it's remappable to anything in
+            # there. an unrecognised name (e.g. an old/hand-edited config)
+            # falls back to the original literal "confirm" behavior rather
+            # than silently doing nothing.
+            shortcut = NAMED_SHORTCUTS.get(settings.thumbs_up_action, CONFIRM_SHORTCUT)
+            mouse.key_shortcut(shortcut.keycode, shortcut.mods)
         elif action in (ExtraAction.PAUSE_ON, ExtraAction.PAUSE_OFF):
             # freeze/unfreeze cleanly: drop the relative anchor so the cursor
             # doesn't jump when control resumes
