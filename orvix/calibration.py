@@ -33,6 +33,7 @@ import statistics
 import time
 from collections.abc import Callable
 
+from orvix.calibration_viz import BoundsTracker
 from orvix.config import CalibrationBox, Settings, load_config, save_config
 from orvix.leap_client import LeapConnectionError, pick_hand, stream_frames
 
@@ -154,6 +155,7 @@ async def collect_range(
     preferred_hand: str,
     duration: float = SWEEP_SECONDS,
     on_progress: Callable[[float, int], None] | None = None,
+    on_sample: Callable[[float, float], None] | None = None,
 ) -> list[tuple[float, float, float]]:
     """
     watch the hand for `duration` seconds and return every palm position we
@@ -163,6 +165,13 @@ async def collect_range(
     on_progress(elapsed_fraction, n_samples) is called as it goes, so a
     caller can draw a progress bar or update a menu without this module
     needing to know anything about how it's being displayed.
+
+    on_sample(x_mm, y_mm) is called once per captured sample (i.e. only when
+    the hand was actually visible that frame), letting a caller track a live
+    running envelope of where you've swept -- see calibration_viz.py -- again
+    without this module needing to know anything about how that's rendered.
+    kept separate from on_progress since not every caller wants per-sample
+    detail and n_samples alone doesn't say *where* the range is.
     """
     samples: list[tuple[float, float, float]] = []
     start = time.monotonic()
@@ -174,7 +183,10 @@ async def collect_range(
 
         hand = pick_hand(frame, preferred_hand)
         if hand is not None:
-            samples.append(tuple(hand["palmPosition"]))
+            pos = tuple(hand["palmPosition"])
+            samples.append(pos)
+            if on_sample is not None:
+                on_sample(pos[0], pos[1])
 
         if on_progress is not None:
             on_progress(min(1.0, elapsed / duration), len(samples))
@@ -222,13 +234,14 @@ async def calibrate(
     settings: Settings,
     duration: float = SWEEP_SECONDS,
     on_progress: Callable[[float, int], None] | None = None,
+    on_sample: Callable[[float, float], None] | None = None,
 ) -> CalibrationBox:
     """
     the whole flow minus any ui: wait for the hand, sweep, build the box.
     doesn't save, the caller decides that after showing the user.
     """
     await wait_for_hand(settings.preferred_hand)
-    samples = await collect_range(settings.preferred_hand, duration, on_progress)
+    samples = await collect_range(settings.preferred_hand, duration, on_progress, on_sample)
     return build_box(samples)
 
 
@@ -241,10 +254,65 @@ def describe_box(box: CalibrationBox) -> str:
     )
 
 
-def _draw_progress(fraction: float, n_samples: int) -> None:
-    filled = int(fraction * 30)
-    bar = "#" * filled + "." * (30 - filled)
-    print(f"\r  [{bar}] {fraction * 100:3.0f}%  {n_samples} samples", end="", flush=True)
+class _TerminalCalibrationView:
+    """
+    redraws a percent bar plus a live ascii envelope grid in place, so the
+    terminal flow shows the same "is my sweep actually covering my range"
+    feedback the GUI's on-screen overlay does, not just a percent-complete
+    bar that says nothing about coverage.
+
+    throttled independently of the ~100/s sample rate: a real terminal
+    can't usefully redraw that often and it'd just be wasted I/O, so this
+    only actually reprints every min_interval seconds. finish() forces one
+    last draw so the final frame reflects where the sweep actually ended,
+    not whatever was on screen when the throttle last skipped a redraw.
+    """
+
+    def __init__(self, width: int = 44, height: int = 12, min_interval: float = 0.08):
+        self._tracker = BoundsTracker()
+        self._fraction = 0.0
+        self._n_samples = 0
+        self._width = width
+        self._height = height
+        self._min_interval = min_interval
+        self._last_draw = 0.0
+        self._n_lines_drawn = 0
+
+    def on_progress(self, fraction: float, n_samples: int) -> None:
+        self._fraction = fraction
+        self._n_samples = n_samples
+        self._maybe_redraw()
+
+    def on_sample(self, x: float, y: float) -> None:
+        self._tracker.update(x, y)
+        self._maybe_redraw()
+
+    def finish(self) -> None:
+        self._maybe_redraw(force=True)
+        print()
+
+    def _maybe_redraw(self, force: bool = False) -> None:
+        now = time.monotonic()
+        if not force and now - self._last_draw < self._min_interval:
+            return
+        self._last_draw = now
+        self._redraw()
+
+    def _redraw(self) -> None:
+        filled = int(self._fraction * 30)
+        bar = "#" * filled + "." * (30 - filled)
+        percent_line = f"[{bar}] {self._fraction * 100:3.0f}%  {self._n_samples} samples"
+        text = percent_line + "\n" + self._tracker.render_ascii(self._width, self._height)
+        lines = text.split("\n")
+
+        # move the cursor back up over whatever we drew last time, then
+        # reprint every line with an erase-to-end-of-line first so a
+        # shorter new line can't leave stray characters from the old one
+        if self._n_lines_drawn:
+            print(f"\033[{self._n_lines_drawn}A", end="")
+        for line in lines:
+            print(f"\033[2K{line}")
+        self._n_lines_drawn = len(lines)
 
 
 async def _run_async() -> None:
@@ -267,9 +335,12 @@ async def _run_async() -> None:
     await wait_for_hand(settings.preferred_hand)
     print("got it, start sweeping!")
     print()
-    samples = await collect_range(settings.preferred_hand, SWEEP_SECONDS, _draw_progress)
-    print()
-    print()
+    view = _TerminalCalibrationView()
+    samples = await collect_range(
+        settings.preferred_hand, SWEEP_SECONDS,
+        on_progress=view.on_progress, on_sample=view.on_sample,
+    )
+    view.finish()
     box = build_box(samples)
 
     old = settings.calibration
