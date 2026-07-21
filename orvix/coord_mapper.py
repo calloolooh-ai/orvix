@@ -74,10 +74,12 @@ class CoordMapper:
         screen_width: int,
         screen_height: int,
         settings: Settings,
+        screen_origin: tuple[float, float] = (0.0, 0.0),
     ):
         self._calibration = calibration
         self._screen_width = screen_width
         self._screen_height = screen_height
+        self._origin_x, self._origin_y = screen_origin
 
         self._filter_x = OneEuroFilter(
             min_cutoff=settings.one_euro_min_cutoff, beta=settings.one_euro_beta
@@ -97,6 +99,11 @@ class CoordMapper:
         returns (x, y) screen pixel coords, clamped to the screen bounds and
         smoothed. note Leap's y axis (height above sensor) maps to screen y
         inverted: higher hand -> higher on screen -> smaller pixel y.
+
+        the calibration box always maps onto the full width/height passed in
+        (usually the whole multi-monitor desktop, see displays.py); screen_origin
+        just shifts the result into Quartz's global coordinate space, it
+        doesn't change what fraction of the box gets you to an edge.
         """
         x_mm, y_mm, _z_mm = palm_position
         cal = self._calibration
@@ -112,7 +119,7 @@ class CoordMapper:
         clamped_x = _clamp(smoothed_x, 0, self._screen_width)
         clamped_y = _clamp(smoothed_y, 0, self._screen_height)
 
-        return int(round(clamped_x)), int(round(clamped_y))
+        return int(round(clamped_x + self._origin_x)), int(round(clamped_y + self._origin_y))
 
     def reset(self) -> None:
         """
@@ -137,14 +144,22 @@ class RelativeCoordMapper:
         screen_height: int,
         settings: Settings,
         start: tuple[float, float] | None = None,
+        screen_origin: tuple[float, float] = (0.0, 0.0),
     ):
         self._screen_width = screen_width
         self._screen_height = screen_height
         self._settings = settings
+        self._origin_x, self._origin_y = screen_origin
 
         # park it in the middle to begin with, it'll be wherever you push it
-        # from there
-        self._x, self._y = start if start is not None else (screen_width / 2, screen_height / 2)
+        # from there. "middle" is the desktop's centre, not just this
+        # screen's, so on a multi-monitor bounding box that's the centre of
+        # the whole span rather than always landing back on the main display
+        self._x, self._y = (
+            start
+            if start is not None
+            else (self._origin_x + screen_width / 2, self._origin_y + screen_height / 2)
+        )
 
         self._prev: tuple[float, float] | None = None
         self._filter_x = OneEuroFilter(
@@ -204,8 +219,8 @@ class RelativeCoordMapper:
         # leap y goes up, screen y goes down, so this one flips
         self._y -= dy_mm * gain
 
-        self._x = _clamp(self._x, 0, self._screen_width)
-        self._y = _clamp(self._y, 0, self._screen_height)
+        self._x = _clamp(self._x, self._origin_x, self._origin_x + self._screen_width)
+        self._y = _clamp(self._y, self._origin_y, self._origin_y + self._screen_height)
 
         return int(round(self._x)), int(round(self._y))
 
@@ -242,11 +257,17 @@ class TiltCoordMapper:
         screen_height: int,
         settings: Settings,
         start: tuple[float, float] | None = None,
+        screen_origin: tuple[float, float] = (0.0, 0.0),
     ):
         self._screen_width = screen_width
         self._screen_height = screen_height
         self._settings = settings
-        self._x, self._y = start if start is not None else (screen_width / 2, screen_height / 2)
+        self._origin_x, self._origin_y = screen_origin
+        self._x, self._y = (
+            start
+            if start is not None
+            else (self._origin_x + screen_width / 2, self._origin_y + screen_height / 2)
+        )
         self._t_prev: float | None = None
 
     def _deflection(self, raw: float) -> float:
@@ -294,8 +315,8 @@ class TiltCoordMapper:
         # tilting away from you (normal z negative) should send the cursor up
         self._y += self._deflection(nz) * speed * dt
 
-        self._x = _clamp(self._x, 0, self._screen_width)
-        self._y = _clamp(self._y, 0, self._screen_height)
+        self._x = _clamp(self._x, self._origin_x, self._origin_x + self._screen_width)
+        self._y = _clamp(self._y, self._origin_y, self._origin_y + self._screen_height)
         return int(round(self._x)), int(round(self._y))
 
     def map_to_screen(
@@ -316,10 +337,15 @@ class TiltCoordMapper:
         self._t_prev = None
 
 
-def make_mapper(settings: Settings, screen_width: int, screen_height: int) -> Mapper:
+def make_mapper(
+    settings: Settings,
+    screen_width: int,
+    screen_height: int,
+    screen_origin: tuple[float, float] = (0.0, 0.0),
+) -> Mapper:
     """pick a mapper based on settings.cursor_mode."""
     if settings.cursor_mode == "relative":
-        return RelativeCoordMapper(screen_width, screen_height, settings)
+        return RelativeCoordMapper(screen_width, screen_height, settings, screen_origin=screen_origin)
     if settings.cursor_mode == "tilt":
-        return TiltCoordMapper(screen_width, screen_height, settings)
-    return CoordMapper(settings.calibration, screen_width, screen_height, settings)
+        return TiltCoordMapper(screen_width, screen_height, settings, screen_origin=screen_origin)
+    return CoordMapper(settings.calibration, screen_width, screen_height, settings, screen_origin=screen_origin)

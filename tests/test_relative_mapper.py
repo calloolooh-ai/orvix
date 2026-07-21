@@ -109,3 +109,31 @@ def test_cursor_doesnt_drift_while_hand_is_held_still():
     )
     # a few px of wander is fine, a cursor that walks across the screen isn't
     assert drift < 40, f"cursor drifted {drift}px with a still hand"
+
+
+# -- multi-monitor: a screen_origin that isn't (0, 0), e.g. a desktop bounding
+# box for two side-by-side displays where the second one sits to the right --
+
+
+def test_starts_centred_on_the_offset_desktop_not_at_global_zero():
+    # a 3840x1080 bounding box starting at x=0 (main display) is the simple
+    # case already covered above; here the *box itself* is offset, as if the
+    # union of displays started at x=500 for some arrangement
+    m = RelativeCoordMapper(1920, 1080, Settings(), screen_origin=(500.0, 0.0))
+    (x, y) = drive(m, [(0.0, 200.0)])[0]
+    assert (x, y) == (500 + 960, 540)
+
+
+def test_cursor_stays_within_offset_bounds():
+    m = RelativeCoordMapper(1920, 1080, Settings(), screen_origin=(-1920.0, 0.0))
+    out = drive(m, [(i * 20.0, 200.0 - i * 10.0) for i in range(200)])
+    for x, y in out:
+        assert -1920 <= x <= 0
+        assert 0 <= y <= 1080
+
+
+def test_make_mapper_threads_screen_origin_through():
+    m = make_mapper(Settings(cursor_mode="relative"), 1920, 1080, screen_origin=(500.0, 0.0))
+    assert isinstance(m, RelativeCoordMapper)
+    (x, y) = drive(m, [(0.0, 200.0)])[0]
+    assert (x, y) == (500 + 960, 540)

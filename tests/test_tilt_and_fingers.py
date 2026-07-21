@@ -106,6 +106,18 @@ def test_a_stall_cant_lurch_the_cursor_across_the_screen():
     assert x - 960 < 200
 
 
+def test_tilt_starts_centred_on_an_offset_desktop():
+    m = TiltCoordMapper(1920, 1080, Settings(), screen_origin=(500.0, 0.0))
+    assert tilt_for(m, (0.0, -1.0, 0.0)) == (500 + 960, 540)
+
+
+def test_tilt_cursor_stays_within_offset_bounds():
+    m = TiltCoordMapper(1920, 1080, Settings(), screen_origin=(-1920.0, 0.0))
+    x, y = tilt_for(m, (1.0, 0.0, 1.0), frames=2000)
+    assert -1920 <= x <= 0
+    assert 0 <= y <= 1080
+
+
 # -- dead zone --
 
 

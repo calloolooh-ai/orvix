@@ -52,3 +52,41 @@ def test_repeated_calls_stay_smoothed_and_bounded():
     x, y = mapper.map_to_screen((10, 205, 0), timestamp=0.01)
     assert 0 <= x <= 1000
     assert 0 <= y <= 500
+
+
+# -- multi-monitor: a non-zero screen_origin, as a second display placed
+# left of main would produce (negative x) or above main (negative y) --
+
+
+def make_offset_mapper(screen_width=1000, screen_height=500, screen_origin=(-1000.0, 0.0)):
+    calibration = CalibrationBox(x_min=-100, x_max=100, y_min=100, y_max=300, z_min=-50, z_max=50)
+    settings = Settings()
+    return CoordMapper(calibration, screen_width, screen_height, settings, screen_origin=screen_origin)
+
+
+def test_origin_shifts_center_of_calibration_box_into_second_display():
+    # a display bounding box that starts at x=-1000 (a monitor to the left of
+    # main): the centre of the calibration box should land at the centre of
+    # *that* box, i.e. -1000 + 500 = -500, not back at global x=500
+    mapper = make_offset_mapper()
+    x, y = mapper.map_to_screen((0, 200, 0), timestamp=0.0)
+    assert x == -500
+    assert y == 250
+
+
+def test_origin_shifts_clamped_edges_too():
+    mapper = make_offset_mapper()
+    x, _y = mapper.map_to_screen((-500, 200, 0), timestamp=0.0)
+    assert x == -1000  # clamped to the offset screen's left edge, not global 0
+
+    mapper2 = make_offset_mapper()
+    x, _y = mapper2.map_to_screen((500, 200, 0), timestamp=0.0)
+    assert x == 0  # clamped to the offset screen's right edge (-1000 + 1000)
+
+
+def test_default_origin_is_zero_zero_backward_compatible():
+    # no screen_origin passed at all: behavior must match pre-multi-monitor
+    # code exactly, since single-display setups shouldn't see any change
+    mapper = make_mapper()
+    x, y = mapper.map_to_screen((0, 200, 0), timestamp=0.0)
+    assert (x, y) == (500, 250)

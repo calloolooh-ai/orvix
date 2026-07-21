@@ -19,9 +19,8 @@ import logging
 import time
 from collections.abc import Callable
 
-import Quartz
-
 from orvix import calibration
+from orvix.displays import get_desktop_bounds
 from orvix.config import Settings, load_config
 from orvix.gesture_interpreter import GestureEvent, GestureInterpreter, GestureType
 from orvix.coord_mapper import Mapper, TiltCoordMapper, make_mapper
@@ -61,12 +60,6 @@ _GESTURE_FAMILY: dict[GestureType, tuple[str, str]] = {
 }
 
 
-def _get_screen_size() -> tuple[int, int]:
-    """main display size in pixels, used to scale hand position to screen coords."""
-    display_id = Quartz.CGMainDisplayID()
-    width = Quartz.CGDisplayPixelsWide(display_id)
-    height = Quartz.CGDisplayPixelsHigh(display_id)
-    return width, height
 
 
 def _dispatch(
@@ -319,10 +312,15 @@ async def run_live(
     of only ever reading config from disk once and logging to stdout.
     """
     settings = settings if settings is not None else load_config()
-    screen_width, screen_height = _get_screen_size()
-    logger.info("screen size: %dx%d", screen_width, screen_height)
+    desktop = get_desktop_bounds(settings.multi_monitor)
+    screen_width, screen_height = desktop.width, desktop.height
+    screen_origin = (desktop.origin_x, desktop.origin_y)
+    logger.info(
+        "desktop bounds: %dx%d at (%d, %d) [multi_monitor=%s]",
+        screen_width, screen_height, screen_origin[0], screen_origin[1], settings.multi_monitor,
+    )
 
-    mapper = make_mapper(settings, screen_width, screen_height)
+    mapper = make_mapper(settings, screen_width, screen_height, screen_origin=screen_origin)
     interpreter = GestureInterpreter(settings)
     mouse: MouseController = DryRunMouseController() if dry_run else QuartzMouseController()
 
@@ -430,7 +428,7 @@ async def run_live(
                 palm = hand["palmPosition"]
                 if circle.feed(palm[0], palm[2], now):
                     radial_anchor = mapper.map_to_screen(tuple(palm), now)
-                    center = (screen_width / 2, screen_height / 2)
+                    center = desktop.center
                     radial.open(center, now)
                     if on_radial is not None:
                         on_radial(_radial_state(radial, None, 0.0))
