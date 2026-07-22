@@ -446,15 +446,12 @@ class OrvixApp(rumps.App):
             # means nothing until it restarts. do that here rather than
             # leaving the menu showing one mode while a different one is
             # actually driving the cursor.
-            if self.worker.running:
-                dry_run = bool(self.dry_run.state)
-                # stop(wait=True) blocks this thread up to 2s (see
-                # PipelineWorker.stop) with the menu otherwise showing nothing
-                # different, which reads as a hang the same way the old
-                # calibration wait phase did. say so while it happens.
-                self.status_item.title = "status: restarting..."
-                self.worker.stop(wait=True)
-                self.worker.start(self.settings, dry_run=dry_run)
+            # stop(wait=True) blocks this thread up to 2s (see
+            # PipelineWorker.stop) with the menu otherwise showing nothing
+            # different, which reads as a hang the same way the old
+            # calibration wait phase did. _restart_pipeline_if_running says
+            # so while it happens.
+            self._restart_pipeline_if_running()
 
         return _set
 
@@ -465,11 +462,7 @@ class OrvixApp(rumps.App):
 
         # same reason as cursor mode: desktop bounds are read once when the
         # pipeline starts, so the change is invisible until it restarts.
-        if self.worker.running:
-            dry_run = bool(self.dry_run.state)
-            self.status_item.title = "status: restarting..."
-            self.worker.stop(wait=True)
-            self.worker.start(self.settings, dry_run=dry_run)
+        self._restart_pipeline_if_running()
 
     def _make_action_setter(self, family: str, action: str):
         def _set(sender: rumps.MenuItem) -> None:
@@ -511,11 +504,7 @@ class OrvixApp(rumps.App):
             save_config(self.settings)
             # the extra-gesture set is built at pipeline start, so restart to
             # apply, same as cursor mode and radial dwell.
-            if self.worker.running:
-                dry_run = bool(self.dry_run.state)
-                self.status_item.title = "status: restarting..."
-                self.worker.stop(wait=True)
-                self.worker.start(self.settings, dry_run=dry_run)
+            self._restart_pipeline_if_running()
 
         return _set
 
@@ -530,11 +519,7 @@ class OrvixApp(rumps.App):
             # the RadialMenu is built with its dwell at pipeline start, so a
             # change only lands on restart. do it now rather than leave the
             # menu claiming one dwell while another is live.
-            if self.worker.running:
-                dry_run = bool(self.dry_run.state)
-                self.status_item.title = "status: restarting..."
-                self.worker.stop(wait=True)
-                self.worker.start(self.settings, dry_run=dry_run)
+            self._restart_pipeline_if_running()
 
         return _set
 
@@ -602,11 +587,19 @@ class OrvixApp(rumps.App):
         touches a start-time-only field like cursor mode or multi-monitor."""
         save_config(self.settings)
         self._refresh_action_checkmarks()
-        if self.worker.running:
-            dry_run = bool(self.dry_run.state)
-            self.status_item.title = "status: restarting..."
-            self.worker.stop(wait=True)
-            self.worker.start(self.settings, dry_run=dry_run)
+        self._restart_pipeline_if_running()
+
+    def _restart_pipeline_if_running(self) -> None:
+        """common tail for every setter that only takes effect on pipeline
+        start (cursor mode, multi-monitor, extra gestures, radial dwell,
+        profile load): restart so the change actually applies instead of the
+        menu claiming one thing while a different one is still live."""
+        if not self.worker.running:
+            return
+        dry_run = bool(self.dry_run.state)
+        self.status_item.title = "status: restarting..."
+        self.worker.stop(wait=True)
+        self.worker.start(self.settings, dry_run=dry_run)
 
     def _make_profile_load_setter(self, name: str):
         def _load(sender: rumps.MenuItem) -> None:
