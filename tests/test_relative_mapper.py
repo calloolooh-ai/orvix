@@ -111,6 +111,32 @@ def test_cursor_doesnt_drift_while_hand_is_held_still():
     assert drift < 40, f"cursor drifted {drift}px with a still hand"
 
 
+def test_cursor_doesnt_drift_over_a_long_session():
+    """
+    the short version above only runs ~5s of frames, too brief to catch a
+    slow compounding bias (e.g. from asymmetric rounding or a filter that
+    doesn't actually converge to zero-mean). this drives 20x as many frames
+    (~5.3 minutes at 75fps) with the same zero-mean noise: if differencing
+    the filtered signal introduced any systematic per-frame bias, drift here
+    would grow roughly linearly with frame count and blow well past the
+    short test's bound. it doesn't, which pins down that relative mode's
+    filter-then-difference approach has no built-in session-length drift of
+    its own -- any real-world drift has to come from actual Leap sensor bias,
+    not from this math.
+    """
+    random.seed(11)
+    m = RelativeCoordMapper(1920, 1080, Settings())
+    pts = [(random.gauss(0, 1.0), 200.0 + random.gauss(0, 1.0)) for _ in range(8000)]
+    out = drive(m, pts)
+
+    start = out[10]
+    drift = max(
+        max(abs(x - start[0]) for x, _ in out[10:]),
+        max(abs(y - start[1]) for _, y in out[10:]),
+    )
+    assert drift < 40, f"cursor drifted {drift}px over a long still-handed session"
+
+
 # -- multi-monitor: a screen_origin that isn't (0, 0), e.g. a desktop bounding
 # box for two side-by-side displays where the second one sits to the right --
 
