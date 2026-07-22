@@ -543,9 +543,9 @@ class OrvixApp(rumps.App):
 
     def _refresh_action_checkmarks(self) -> None:
         for item in self.pinch_menu.values():
-            item.state = ACTION_LABELS[self.settings.pinch_action] == item.title
+            item.state = ACTION_LABELS.get(self.settings.pinch_action) == item.title
         for item in self.grab_menu.values():
-            item.state = ACTION_LABELS[self.settings.grab_action] == item.title
+            item.state = ACTION_LABELS.get(self.settings.grab_action) == item.title
         for item in self.mode_menu.values():
             item.state = CURSOR_MODE_LABELS.get(self.settings.cursor_mode) == item.title
         active_fist = _fist_choice_for(self.settings)

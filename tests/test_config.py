@@ -107,6 +107,34 @@ def test_load_config_leaves_valid_radial_actions_untouched(tmp_path):
     assert loaded.radial_actions == custom
 
 
+def test_load_config_falls_back_to_default_pinch_action_when_invalid(tmp_path):
+    path = tmp_path / "config.yaml"
+    save_config(Settings(pinch_action="typo_action"), path)
+
+    loaded = load_config(path)
+
+    assert loaded.pinch_action == "click"
+
+
+def test_load_config_falls_back_to_default_grab_action_when_invalid(tmp_path):
+    path = tmp_path / "config.yaml"
+    save_config(Settings(grab_action="not_a_real_action"), path)
+
+    loaded = load_config(path)
+
+    assert loaded.grab_action == "scroll"
+
+
+def test_load_config_leaves_valid_gesture_actions_untouched(tmp_path):
+    path = tmp_path / "config.yaml"
+    save_config(Settings(pinch_action="disabled", grab_action="click"), path)
+
+    loaded = load_config(path)
+
+    assert loaded.pinch_action == "disabled"
+    assert loaded.grab_action == "click"
+
+
 def test_save_then_load_round_trips_multi_monitor(tmp_path):
     path = tmp_path / "config.yaml"
     save_config(Settings(multi_monitor=False), path)

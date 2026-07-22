@@ -22,6 +22,13 @@ from orvix.shortcuts import RADIAL_SHORTCUTS as _RADIAL_SHORTCUTS
 
 _VALID_RADIAL_ACTIONS = frozenset({*_RADIAL_SHORTCUTS, "close"})
 
+# same set main.py's pinch/grab dispatch actually understands (see
+# _GESTURE_FAMILY handling in main.py) -- anything else is a silent no-op
+# there, but gui.py's ACTION_LABELS[...] indexes on it directly and raises
+# KeyError, which crashes the (terminal-less) menu bar app on startup or
+# profile load. same class of bug as radial_actions below.
+_VALID_GESTURE_ACTIONS = frozenset({"click", "scroll", "disabled"})
+
 logger = logging.getLogger(__name__)
 
 # where the user's personal config lives. gitignored on purpose, since it'll
@@ -397,6 +404,25 @@ def _sanitize_radial_actions(settings: Settings) -> None:
         settings.radial_actions = valid
 
 
+def _sanitize_gesture_action(settings: Settings, field: str, default: str) -> None:
+    """
+    fall back to `default` for a pinch_action/grab_action that isn't one of
+    "click"/"scroll"/"disabled" -- main.py's dispatch already no-ops
+    gracefully on an unknown value, but gui.py's ACTION_LABELS[...] indexes
+    the menu checkmarks with it directly and raises KeyError on anything
+    else, which crashes the menu bar app at startup or on a profile load
+    before you ever get a terminal to see why.
+    """
+    value = getattr(settings, field)
+    if value in _VALID_GESTURE_ACTIONS:
+        return
+    logger.warning(
+        "config field %r was %r, not a valid action -- falling back to %r",
+        field, value, default,
+    )
+    setattr(settings, field, default)
+
+
 def _sanitize_settings(settings: Settings) -> Settings:
     """
     clamp fields that would otherwise silently misbehave instead of raising --
@@ -411,6 +437,8 @@ def _sanitize_settings(settings: Settings) -> Settings:
     for field in _NONNEGATIVE_SECONDS_FIELDS:
         _clamp_field(settings, field, 0.0, float("inf"))
     _sanitize_radial_actions(settings)
+    _sanitize_gesture_action(settings, "pinch_action", "click")
+    _sanitize_gesture_action(settings, "grab_action", "scroll")
     return settings
 
 

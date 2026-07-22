@@ -173,6 +173,23 @@ def test_action_setter_updates_settings_and_saves(isolated_app):
     assert len(isolated_app._test_saved) == 1
 
 
+def test_refresh_action_checkmarks_survives_invalid_pinch_action(monkeypatch, tmp_path):
+    # config.py's _sanitize_settings is the normal line of defense against an
+    # invalid pinch_action/grab_action (see test_config.py), but this checks
+    # gui.py's own checkmark refresh doesn't KeyError even if something else
+    # ever hands it an out-of-band Settings -- ACTION_LABELS[...] used to be
+    # a direct index here, which crashed the (terminal-less) menu bar app.
+    monkeypatch.setattr(gui, "load_config", lambda: Settings(pinch_action="typo", grab_action="also_bad"))
+    monkeypatch.setattr(gui, "save_config", lambda settings, *a, **k: None)
+    monkeypatch.setattr(gui, "DEFAULT_CONFIG_PATH", tmp_path / "config.yaml")
+    monkeypatch.setattr(gui, "list_profiles", lambda: [])
+
+    app = gui.OrvixApp()  # must not raise
+
+    assert all(not item.state for item in app.pinch_menu.values())
+    assert all(not item.state for item in app.grab_menu.values())
+
+
 def test_thumbs_up_setter_updates_settings_and_refreshes_checkmarks(isolated_app):
     setter = isolated_app._make_thumbs_up_setter("undo")
     sender = isolated_app.thumbs_menu.get("Undo")
