@@ -391,6 +391,11 @@ class OrvixApp(rumps.App):
         self._cal_tracker: BoundsTracker | None = None
         self._cal_fraction = 0.0
         self._cal_n_samples = 0
+        # guards against a second calibration thread starting while one is
+        # already running (e.g. clicking "Calibrate..." twice back to back) --
+        # without this, two threads would both write self._cal_tracker/
+        # self.settings.calibration and both call save_config concurrently
+        self._calibrating = False
 
         # fires once NSApplication is actually up (rumps sets that up inside
         # run(), not __init__), so an alert shown from here won't race a not-
@@ -656,6 +661,12 @@ class OrvixApp(rumps.App):
         if self.worker.running:
             rumps.alert("orvix", "stop the live pipeline before calibrating.")
             return
+        if self._calibrating:
+            # clicking "Calibrate..." again while a sweep is already in
+            # progress would start a second thread racing the first one for
+            # self._cal_tracker/self.settings.calibration/save_config
+            rumps.alert("orvix", "calibration is already running, let it finish first.")
+            return
 
         # this alert blocks the main thread until you dismiss it, which is
         # what we want: the sweep shouldn't start counting down while you're
@@ -668,6 +679,7 @@ class OrvixApp(rumps.App):
             "wiping a window. keep it over the sensor, palm down.\n\n"
             "no need to hold still or hit exact spots. watch the menu bar for progress.",
         )
+        self._calibrating = True
         threading.Thread(target=self._run_calibration, daemon=True).start()
 
     def _quit(self, sender: rumps.MenuItem) -> None:
@@ -735,26 +747,31 @@ class OrvixApp(rumps.App):
         self._cal_n_samples = 0
 
         try:
-            box = asyncio.run(
-                calibration.calibrate(
-                    self.settings,
-                    on_progress=self._calibration_progress,
-                    on_sample=self._calibration_sample,
+            try:
+                box = asyncio.run(
+                    calibration.calibrate(
+                        self.settings,
+                        on_progress=self._calibration_progress,
+                        on_sample=self._calibration_sample,
+                    )
                 )
-            )
-        except calibration.CalibrationError as exc:
-            self._on_main_thread(self._end_calibration_ui)
-            self._handle_error(str(exc))
-            return
-        except LeapConnectionError as exc:
-            self._on_main_thread(self._end_calibration_ui)
-            self._handle_error(str(exc))
-            return
+            except calibration.CalibrationError as exc:
+                self._on_main_thread(self._end_calibration_ui)
+                self._handle_error(str(exc))
+                return
+            except LeapConnectionError as exc:
+                self._on_main_thread(self._end_calibration_ui)
+                self._handle_error(str(exc))
+                return
 
-        self.settings.calibration = box
-        save_config(self.settings)
+            self.settings.calibration = box
+            save_config(self.settings)
 
-        self._on_main_thread(self._end_calibration_ui)
+            self._on_main_thread(self._end_calibration_ui)
+        finally:
+            # always clear, however this run ended, so "Calibrate..." works
+            # again -- see the guard in _calibrate()
+            self._calibrating = False
         self._on_main_thread(
             lambda: rumps.alert(
                 "orvix",

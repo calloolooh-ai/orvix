@@ -347,6 +347,65 @@ def test_delete_profile_setter_keeps_it_when_cancelled(isolated_app, monkeypatch
     assert "temp" in isolated_app._test_profiles
 
 
+def test_calibrate_refuses_a_second_run_while_one_is_in_progress(isolated_app, monkeypatch):
+    # clicking "Calibrate..." twice back to back used to spin up two threads
+    # racing each other for self._cal_tracker/self.settings.calibration/
+    # save_config -- this guard is what stops the second one from starting.
+    started = []
+    monkeypatch.setattr(gui.threading, "Thread", lambda *a, **k: started.append(k) or _NoopThread())
+    alerts = []
+    monkeypatch.setattr(gui.rumps, "alert", lambda *a, **k: alerts.append(a))
+
+    isolated_app._calibrating = True
+    isolated_app._calibrate(None)
+
+    assert started == []
+    assert len(alerts) == 1
+    assert "already running" in alerts[0][1]
+
+
+def test_calibrate_starts_when_not_already_calibrating(isolated_app, monkeypatch):
+    started = []
+    monkeypatch.setattr(gui.threading, "Thread", lambda *a, **k: started.append(k) or _NoopThread())
+    monkeypatch.setattr(gui.rumps, "alert", lambda *a, **k: None)
+
+    isolated_app._calibrate(None)
+
+    assert len(started) == 1
+    assert isolated_app._calibrating is True
+
+
+def test_run_calibration_clears_the_flag_even_when_calibration_errors(isolated_app, monkeypatch):
+    def _broken(*a, **k):
+        raise gui.calibration.CalibrationError("sweep too short")
+
+    monkeypatch.setattr(gui.calibration, "calibrate", _broken)
+    monkeypatch.setattr(gui, "_main_thread_invoker", _SyncMainThreadInvoker())
+    # _handle_error's path pops a real rumps.alert, which blocks forever
+    # waiting for a click in a headless test run if left unmocked
+    monkeypatch.setattr(gui.rumps, "alert", lambda *a, **k: None)
+    isolated_app._calibrating = True
+
+    isolated_app._run_calibration()
+
+    assert isolated_app._calibrating is False
+
+
+class _NoopThread:
+    """stand-in for threading.Thread so calibration tests never spin up a real thread."""
+
+    def start(self) -> None:
+        pass
+
+
+class _SyncMainThreadInvoker:
+    """runs the callback synchronously instead of hopping to a real Cocoa main thread."""
+
+    def performSelectorOnMainThread_withObject_waitUntilDone_(self, _selector, args, _wait):
+        fn, fn_args = args
+        fn(*fn_args)
+
+
 class _FakeWindow:
     """stand-in for rumps.Window so tests never pop a real text-input dialog."""
 
