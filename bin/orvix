@@ -82,7 +82,10 @@ async def probe():
         return
     try:
         for _ in range(20):
-            msg = json.loads(await asyncio.wait_for(ws.recv(), timeout=2))
+            try:
+                msg = json.loads(await asyncio.wait_for(ws.recv(), timeout=2))
+            except asyncio.TimeoutError:
+                continue
             ev = msg.get("event", {})
             if ev.get("type") == "deviceEvent":
                 st = ev["state"]
