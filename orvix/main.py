@@ -54,6 +54,11 @@ logger = logging.getLogger("orvix.main")
 # render(progress) treats it as "show" rather than "hide".
 _CURSOR_RING_BASELINE = 0.02
 
+# how long the cursor ring flashes to full brightness right after a click
+# actually lands, so cursor_ring_enabled gives visible feedback that a click
+# registered, not just a dwell countdown / idle highlight.
+_CLICK_FLASH_SECONDS = 0.15
+
 # which (family, phase) each gesture event belongs to, used to look up the
 # configurable action (settings.pinch_action / settings.grab_action) for it.
 # POINT_MOVE and HAND_LOST aren't here, they're handled before this lookup.
@@ -74,11 +79,15 @@ def _dispatch(
     mapper: Mapper,
     mouse: MouseController,
     settings: Settings,
-) -> None:
+) -> bool:
     """
     turn one gesture event into the corresponding mouse_control call, based
     on what settings.pinch_action / settings.grab_action say that gesture
     should do (see config.py). same event stream, swappable behavior.
+
+    returns True if this call made a click actually land (a right click, or
+    the "end" phase of a pinch/grab whose action is "click"), so callers can
+    use it as a "click just happened" signal, e.g. flashing the cursor ring.
     """
     now = time.monotonic()
 
@@ -89,10 +98,10 @@ def _dispatch(
         # or when your hand reappears it'd apply the whole distance your
         # hand travelled while out of view as one jump.
         mapper.reset()
-        return
+        return False
 
     if event.palm_position is None:
-        return
+        return False
 
     # tilt mode steers off the angle of your hand, not where it is, so it
     # needs the palm normal rather than the palm position
@@ -103,19 +112,19 @@ def _dispatch(
 
     if event.type == GestureType.POINT_MOVE:
         mouse.move(x, y)
-        return
+        return False
 
     if event.type == GestureType.RIGHT_CLICK:
         # no move() first, same reasoning as the left click: the cursor was
         # frozen while your fingers closed and it's already on target
         mouse.right_click()
-        return
+        return True
 
     family, phase = _GESTURE_FAMILY[event.type]
     action = settings.pinch_action if family == "pinch" else settings.grab_action
 
     if action == "disabled":
-        return
+        return False
 
     if action == "click":
         if phase == "start":
@@ -130,6 +139,7 @@ def _dispatch(
             mouse.drag_to(x, y)
         elif phase == "end":
             mouse.mouse_up()
+            return True
     elif action == "scroll":
         # only the "continue" phase carries a meaningful velocity to scroll
         # with, start/end are just no-ops for this action
@@ -141,6 +151,7 @@ def _dispatch(
             scroll_amount = int(vy / 20)
             if scroll_amount != 0:
                 mouse.scroll(0, scroll_amount)
+    return False
 
 
 RadialListener = Callable[[dict | None], None]
@@ -401,6 +412,10 @@ async def run_live(
     # when the countdown ends rather than a None every idle frame
     dwell_shown = False
 
+    # monotonic deadline for the click-flash (see _CLICK_FLASH_SECONDS): 0.0
+    # means no flash pending
+    flash_until = 0.0
+
     # the mapper's screen position for the hand at the moment the wheel
     # opened. the wheel is always drawn dead centre now (see the circle-open
     # block below), but wedge selection still needs to feel like pointing:
@@ -479,11 +494,16 @@ async def run_live(
             # tiny baseline progress keeps the ring visible (as a faint
             # always-there highlight) whenever a hand is tracked, so the real
             # dwell countdown grows out of that baseline instead of popping
-            # the ring in from nothing.
+            # the ring in from nothing. a completed click briefly flashes the
+            # ring to full so cursor_ring_enabled gives visible click feedback
+            # too, not just a dwell countdown.
             if on_dwell is not None:
                 progress = extras.dwell_progress
                 if progress > 0.01:
                     on_dwell(progress)
+                    dwell_shown = True
+                elif settings.cursor_ring_enabled and now < flash_until:
+                    on_dwell(1.0)
                     dwell_shown = True
                 elif settings.cursor_ring_enabled and hand is not None:
                     on_dwell(_CURSOR_RING_BASELINE)
@@ -505,7 +525,8 @@ async def run_live(
                 if on_event is not None:
                     on_event(event)
                 if not zoom_active:
-                    _dispatch(event, mapper, mouse, settings)
+                    if _dispatch(event, mapper, mouse, settings):
+                        flash_until = now + _CLICK_FLASH_SECONDS
 
             # after normal dispatch, watch for a circle to open the wheel. uses
             # the horizontal palm plane (x, z); a completed loop always pops

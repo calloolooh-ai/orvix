@@ -30,6 +30,9 @@ class FakeMouse:
     def scroll(self, dx, dy):
         self.calls.append(("scroll", dx, dy))
 
+    def right_click(self):
+        self.calls.append(("right_click",))
+
 
 def make_mapper():
     return CoordMapper(CalibrationBox(), 1920, 1080, Settings())
@@ -107,3 +110,44 @@ def test_hand_lost_and_missing_position_are_ignored():
     _dispatch(GestureEvent(GestureType.PINCH_UP, palm_position=None), mapper, mouse, settings)
 
     assert mouse.calls == []
+
+
+def test_dispatch_reports_true_only_when_a_click_actually_lands():
+    """
+    used by run_live to flash the cursor ring: only the moment a click
+    lands should count, not the down/drag steps or non-click actions.
+    """
+    settings = Settings()
+    mouse = FakeMouse()
+    mapper = make_mapper()
+
+    assert _dispatch(
+        GestureEvent(GestureType.PINCH_DOWN, (0.0, 200.0, 0.0)), mapper, mouse, settings
+    ) is False
+    assert _dispatch(
+        GestureEvent(GestureType.PINCH_DRAG, (0.0, 200.0, 0.0)), mapper, mouse, settings
+    ) is False
+    assert _dispatch(
+        GestureEvent(GestureType.PINCH_UP, (0.0, 200.0, 0.0)), mapper, mouse, settings
+    ) is True
+
+
+def test_dispatch_reports_true_on_right_click():
+    settings = Settings()
+    mouse = FakeMouse()
+    mapper = make_mapper()
+
+    assert _dispatch(
+        GestureEvent(GestureType.RIGHT_CLICK, (0.0, 200.0, 0.0)), mapper, mouse, settings
+    ) is True
+
+
+def test_dispatch_reports_false_when_pinch_remapped_to_scroll():
+    settings = Settings(pinch_action="scroll")
+    mouse = FakeMouse()
+    mapper = make_mapper()
+
+    _dispatch(GestureEvent(GestureType.PINCH_DOWN, (0.0, 200.0, 0.0)), mapper, mouse, settings)
+    assert _dispatch(
+        GestureEvent(GestureType.PINCH_UP, (0.0, 200.0, 0.0)), mapper, mouse, settings
+    ) is False
