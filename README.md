@@ -20,7 +20,7 @@ on top of the core set, these can each be toggled in the menu bar (under More ge
 
 - **draw a circle** to pop up a radial menu, then point at a wedge and either pinch or just rest on it (dwell) to fire it. the wheel is Mission Control, Maximize, App Switcher, Undo, Copy, Paste, Screenshot, and Close, and it draws itself on screen while it's open.
 - **two-hand pinch** and pull apart / push together to zoom
-- **make a fist and twist your wrist** like a knob to change volume
+- **make a fist and twist your wrist** like a knob to change volume -- twist faster for a bigger jump per twist, slower for fine control, between `volume_step_percent` and `volume_max_percent` in config
 - **hold the cursor still** for a beat to left-click, no pinch needed (dwell click)
 - **hold both palms out** like a stop sign to pause orvix, do it again to resume
 - **hold a thumbs-up** to fire a shortcut, Return by default -- remappable in the menu bar ("Thumbs-up does...") or `thumbs_up_action` in config, to anything the radial wedges can do (Mission Control, Maximize, App Switcher, Undo, Copy, Paste, Screenshot)
@@ -144,6 +144,8 @@ now show your sweep happening live instead of just a percent-complete bar:
 - pin the cursor to just the main display instead of every active one
 - turn the radial menu on/off and set its dwell time
 - toggle any of the extra gestures (zoom, volume, dwell click, palms-out pause, thumbs-up)
+- toggle "Show cursor ring" for an always-on ring around the cursor (the same ring dwell click briefly shows, just left on)
+- save/load/delete named config profiles from the "Profiles..." submenu -- handy for swapping between e.g. a demo setup and daily-use settings without hand-editing yaml
 - run calibration (with the live coverage HUD described above)
 - see the last gesture event live
 
