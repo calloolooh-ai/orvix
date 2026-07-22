@@ -28,7 +28,7 @@ from concurrent.futures import CancelledError
 import rumps
 from Foundation import NSObject
 
-from orvix import calibration
+from orvix import __version__, calibration
 from orvix.calibration_viz import BoundsTracker, coverage_rect, marker_fraction
 from orvix.config import (
     DEFAULT_CONFIG_PATH,
@@ -363,6 +363,7 @@ class OrvixApp(rumps.App):
             None,
             rumps.MenuItem("Calibrate...", callback=self._calibrate),
             None,
+            rumps.MenuItem(f"orvix v{__version__}"),
             rumps.MenuItem("Quit", callback=self._quit),
         ]
 

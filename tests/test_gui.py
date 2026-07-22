@@ -132,6 +132,16 @@ def isolated_app(monkeypatch, tmp_path):
     return app
 
 
+def test_menu_shows_the_current_version(isolated_app):
+    from orvix import __version__
+
+    version_items = [
+        item for item in isolated_app.menu.values() if getattr(item, "title", None) == f"orvix v{__version__}"
+    ]
+    assert len(version_items) == 1
+    assert version_items[0].callback is None
+
+
 def test_pinch_and_grab_menus_offer_every_action_choice(isolated_app):
     titles = {item.title for item in isolated_app.pinch_menu.values()}
     assert titles == {"Click / Drag", "Scroll", "Disabled"}
