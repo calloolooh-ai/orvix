@@ -16,8 +16,6 @@ import pytest
 import orvix.gui as gui
 from orvix.config import Settings
 from orvix.gui import (
-    FIST_CHOICES,
-    FIST_LABELS,
     _dwell_label_for,
     _fist_choice_for,
 )

@@ -4,8 +4,6 @@ desktop bounding box. Quartz itself is monkeypatched out, this only needs to
 be right about the geometry, not about talking to real hardware.
 """
 
-import types
-
 import orvix.displays as displays_mod
 
 

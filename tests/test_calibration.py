@@ -5,8 +5,6 @@ pure and is the part that decides whether your cursor covers the screen, so
 it's worth pinning down.
 """
 
-import asyncio
-
 import pytest
 
 from orvix import calibration
