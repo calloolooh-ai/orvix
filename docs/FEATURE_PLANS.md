@@ -28,7 +28,7 @@ scroll already scales off `palm_velocity` (`main.py:149`), and volume-twist rate
 
 ---
 
-## 2. Named config profiles, swappable from the menu bar
+## 2. Named config profiles, swappable from the menu bar — **DONE**
 
 **Goal:** let a user save/name multiple full `Settings` states (e.g. "demo", "precision") and switch between them from the menu bar without hand-editing YAML.
 
@@ -49,7 +49,7 @@ scroll already scales off `palm_velocity` (`main.py:149`), and volume-twist rate
 
 ---
 
-## 3. Optional on-screen cursor highlight ring for normal use
+## 3. Optional on-screen cursor highlight ring for normal use — **DONE**
 
 **Goal:** an always-available toggle that shows a subtle ring around the real cursor during normal operation, not just during dwell-click countdown.
 
@@ -71,7 +71,7 @@ scroll already scales off `palm_velocity` (`main.py:149`), and volume-twist rate
 
 ---
 
-## 4. Adaptive velocity-based acceleration curve for relative mode
+## 4. Adaptive velocity-based acceleration curve for relative mode — *(investigated, no change made, stays open/low priority)*
 
 **Goal:** scale relative-mode cursor gain based on live hand velocity, matching what CursorViaCam does for cursor acceleration.
 
