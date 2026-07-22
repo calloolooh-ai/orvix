@@ -22,6 +22,25 @@ from orvix.shortcuts import DEFAULT_RADIAL_ACTIONS as _DEFAULT_RADIAL_ACTIONS
 # have your specific hand-range calibration in it, not something to commit.
 DEFAULT_CONFIG_PATH = Path.home() / ".orvix" / "config.yaml"
 
+# named, saved/loadable configs (e.g. "demo", "precision"), swappable without
+# clobbering the one active config.yaml. kept in their own subdir so listing
+# profiles never picks up config.yaml itself.
+DEFAULT_PROFILES_DIR = Path.home() / ".orvix" / "profiles"
+
+_PROFILE_NAME_CHARS = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-")
+
+
+def _validate_profile_name(name: str) -> None:
+    """
+    profile names become filenames (name.yaml), so keep them to a safe,
+    unambiguous charset instead of trying to sanitize/escape arbitrary path
+    input. rejects "", ".", "..", path separators, etc.
+    """
+    if not name or not set(name) <= _PROFILE_NAME_CHARS:
+        raise ValueError(
+            f"invalid profile name {name!r}: use only letters, digits, '-' and '_'"
+        )
+
 
 @dataclasses.dataclass
 class CalibrationBox:
@@ -314,3 +333,36 @@ def save_config(settings: Settings, path: Path = DEFAULT_CONFIG_PATH) -> None:
     data = dataclasses.asdict(settings)
     with path.open("w") as f:
         yaml.safe_dump(data, f, default_flow_style=False, sort_keys=False)
+
+
+def list_profiles(profiles_dir: Path = DEFAULT_PROFILES_DIR) -> list[str]:
+    """names of saved profiles (no .yaml suffix), alphabetical. [] if none yet."""
+    if not profiles_dir.exists():
+        return []
+    return sorted(p.stem for p in profiles_dir.glob("*.yaml"))
+
+
+def save_profile(
+    name: str, settings: Settings, profiles_dir: Path = DEFAULT_PROFILES_DIR
+) -> Path:
+    """save `settings` as a named profile, e.g. for a 'demo' or 'precision' setup."""
+    _validate_profile_name(name)
+    path = profiles_dir / f"{name}.yaml"
+    save_config(settings, path)
+    return path
+
+
+def load_profile(name: str, profiles_dir: Path = DEFAULT_PROFILES_DIR) -> Settings:
+    """load a previously saved named profile. raises FileNotFoundError if unknown."""
+    _validate_profile_name(name)
+    path = profiles_dir / f"{name}.yaml"
+    if not path.exists():
+        raise FileNotFoundError(f"no profile named {name!r} at {path}")
+    return load_config(path)
+
+
+def delete_profile(name: str, profiles_dir: Path = DEFAULT_PROFILES_DIR) -> None:
+    """delete a named profile. raises FileNotFoundError if unknown."""
+    _validate_profile_name(name)
+    path = profiles_dir / f"{name}.yaml"
+    path.unlink()
