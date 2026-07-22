@@ -51,4 +51,40 @@ running log of what got done this session. all commits are local only, nothing p
 - checked orvix profile's actual numbers still make sense after all the mapper changes, they do
 - did a full audit late in the session for any remaining state leak or config validation gaps, came up empty, which is a good sign the easy stuff is done
 
-~34 cycles total, 30ish commits. full history in git log if you want the exact diffs.
+## radial menu state leaks
+
+traced a flagged-but-never-checked risk in the feature plan and it turned into three bugs in the same spot: opening the radial menu skips the normal per frame update loop, and turns out three different things were relying on that loop running every frame:
+
+- the cursor ring froze in place instead of hiding while the wheel was open
+- dwell click and thumbs up confirm timers kept their old timestamps frozen, so closing the wheel could fire a click or confirm you never actually did
+- a pinch or grab that was mid hold when the wheel opened had the same problem, could fire a phantom drag or leave the mouse button stuck down on close
+
+fixed all three, then went and checked pause/resume and hand drop for the same class of bug on purpose, both already handled it right.
+
+## more opt-in shortcuts
+
+- added spotlight, force quit, and lock screen as new named shortcuts you can assign to the radial menu or thumbs up, all opt-in so nobody's existing setup changes
+- updated the readme since it only mentioned the original 7 wedges
+
+## more bug fixes from re-reading old modules
+
+- fixed onboarding not detecting first run correctly if you saved a profile without ever touching config.yaml, would keep showing the welcome nag forever
+- fixed collect_range and collect_neutral_tilt in calibration.py hanging forever if the leap device disappears mid sweep, same bug wait_for_hand already got fixed for earlier, just at two more call sites in the same file
+- fixed handrender's docstring claiming multi monitor support it doesnt actually have
+
+## ux polish
+
+- calibration used to just sit there with no feedback for up to 30 seconds while waiting for a hand, looked exactly like a hang, added a status message
+- same problem existed on all 5 of the menu bar's pipeline restart actions (cursor mode, multi monitor, extra gestures, dwell, profile load), each blocks up to 2 seconds with zero feedback, added a restarting status to all of them
+
+## code cleanup
+
+- cleaned up a stray import and inconsistent blank lines in main.py from a bunch of patches getting layered in over time
+- pulled the pipeline restart code that got copy pasted into all 5 gui.py menu handlers into one shared method
+
+## more verification, nothing found
+
+- did a full sweep for any other "async for" over a leapd stream that could hang the same way calibration did, found nothing else needs fixing, the pattern is closed out now
+- reread config.py and extra_gestures.py for redundant logic from being patched so many times, both still hold up clean
+
+~55 cycles total, 45ish commits. full history in git log if you want the exact diffs.
