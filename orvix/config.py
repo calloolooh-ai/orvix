@@ -247,7 +247,16 @@ class Settings:
     # tuning
     zoom_step_mm: float = 14.0
     volume_step_deg: float = 12.0
+    # volume_step_percent is the change applied for a slow, deliberate twist
+    # (at/below volume_rate_slow_deg_s); it scales up to volume_max_percent
+    # for a fast twist (at/above volume_rate_fast_deg_s), so flicking your
+    # wrist changes volume by more per step than a lazy twist does instead of
+    # every step being the same fixed size. see scaled_volume_percent() in
+    # extra_gestures.py.
     volume_step_percent: int = 6
+    volume_max_percent: int = 18
+    volume_rate_slow_deg_s: float = 30.0
+    volume_rate_fast_deg_s: float = 200.0
     # dwell stillness is judged in Leap palm millimetres, not screen pixels,
     # so we don't have to re-map (and thus re-filter) the cursor position.
     dwell_click_radius_mm: float = 12.0

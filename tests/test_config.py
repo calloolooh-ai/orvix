@@ -56,6 +56,29 @@ def test_missing_cursor_ring_enabled_key_falls_back_to_default(tmp_path):
     assert loaded.cursor_ring_enabled is False
 
 
+def test_volume_scaling_fields_have_sane_defaults():
+    settings = Settings()
+    assert settings.volume_step_percent == 6
+    assert settings.volume_max_percent == 18
+    assert settings.volume_rate_slow_deg_s == 30.0
+    assert settings.volume_rate_fast_deg_s == 200.0
+
+
+def test_save_then_load_round_trips_volume_max_percent(tmp_path):
+    path = tmp_path / "config.yaml"
+    save_config(Settings(volume_max_percent=25), path)
+    loaded = load_config(path)
+    assert loaded.volume_max_percent == 25
+
+
+def test_missing_volume_max_percent_key_falls_back_to_default(tmp_path):
+    # simulates an existing config.yaml written before this field existed
+    path = tmp_path / "config.yaml"
+    path.write_text("cursor_mode: tilt\n")
+    loaded = load_config(path)
+    assert loaded.volume_max_percent == 18
+
+
 def test_load_config_with_no_file_returns_defaults(tmp_path):
     path = tmp_path / "does_not_exist.yaml"
     loaded = load_config(path)

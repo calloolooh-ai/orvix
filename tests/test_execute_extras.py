@@ -6,9 +6,11 @@ gesture rebinding touches -- CONFIRM now looks up settings.thumbs_up_action
 in shortcuts.NAMED_SHORTCUTS instead of always firing a literal Return.
 """
 
+import math
+
 from orvix.config import CalibrationBox, Settings
 from orvix.coord_mapper import CoordMapper
-from orvix.extra_gestures import ExtraAction
+from orvix.extra_gestures import ExtraAction, ExtraGestures, HandSignals
 from orvix.main import _execute_extras
 from orvix.shortcuts import CONFIRM_SHORTCUT, NAMED_SHORTCUTS
 
@@ -45,6 +47,42 @@ def test_volume_actions_use_the_configured_step_percent():
     mouse = FakeMouse()
     _execute_extras([ExtraAction.VOLUME_UP, ExtraAction.VOLUME_DOWN], mouse, make_mapper(), settings)
     assert mouse.calls == [("set_volume_relative", 10), ("set_volume_relative", -10)]
+
+
+def test_a_slow_twist_uses_the_minimum_volume_step():
+    settings = Settings(
+        volume_step_percent=5,
+        volume_max_percent=20,
+        volume_rate_slow_deg_s=30.0,
+        volume_rate_fast_deg_s=200.0,
+    )
+    extras = ExtraGestures(volume_step_deg=10.0)
+    # small twist over a full second: well under volume_rate_slow_deg_s
+    extras.observe(HandSignals(fist_roll_rad=0.0), now=0.0)
+    actions = extras.observe(HandSignals(fist_roll_rad=math.radians(15)), now=1.0)
+
+    mouse = FakeMouse()
+    _execute_extras(actions, mouse, make_mapper(), settings, extras)
+    assert mouse.calls == [("set_volume_relative", 5)]
+
+
+def test_a_fast_twist_uses_a_bigger_volume_step_than_a_slow_one():
+    settings = Settings(
+        volume_step_percent=5,
+        volume_max_percent=20,
+        volume_rate_slow_deg_s=30.0,
+        volume_rate_fast_deg_s=200.0,
+    )
+    extras = ExtraGestures(volume_step_deg=10.0)
+    # same 15deg twist, but in 20ms instead of a full second -> much faster
+    extras.observe(HandSignals(fist_roll_rad=0.0), now=0.0)
+    actions = extras.observe(HandSignals(fist_roll_rad=math.radians(15)), now=0.02)
+
+    mouse = FakeMouse()
+    _execute_extras(actions, mouse, make_mapper(), settings, extras)
+    assert len(mouse.calls) == 1
+    assert mouse.calls[0][0] == "set_volume_relative"
+    assert mouse.calls[0][1] > 5  # scaled above the slow-twist minimum
 
 
 def test_dwell_click_fires_a_plain_click():

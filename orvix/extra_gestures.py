@@ -51,6 +51,27 @@ def roll_from_normal(palm_normal: tuple[float, float, float]) -> float:
     return math.atan2(x, -y)
 
 
+def scaled_volume_percent(
+    rate_deg_s: float,
+    min_percent: int,
+    max_percent: int,
+    slow_deg_s: float,
+    fast_deg_s: float,
+) -> int:
+    """
+    map twist speed to a volume-change percent between min_percent (a slow,
+    deliberate twist) and max_percent (a fast twist), clamped at both ends.
+    linear interpolation between slow_deg_s and fast_deg_s so a quick flick
+    changes volume more per step than a lazy one, instead of every step being
+    the same fixed size regardless of how fast you twisted.
+    """
+    if fast_deg_s <= slow_deg_s:
+        return min_percent
+    t = (rate_deg_s - slow_deg_s) / (fast_deg_s - slow_deg_s)
+    t = max(0.0, min(1.0, t))
+    return round(min_percent + t * (max_percent - min_percent))
+
+
 def hand_is_open(extended: set[int] | None) -> bool:
     """most fingers straight. None (no finger data) can't be judged open."""
     return extended is not None and len(extended) >= 4
@@ -124,20 +145,30 @@ class _VolumeTwistDetector:
     def __init__(self, step_rad: float):
         self._step = step_rad
         self._last: float | None = None
+        self._last_now: float | None = None
         self._resid = 0.0
+        # abs(rad/s) of the twist that produced the most recent step(s), for
+        # scaling how big a volume change each step should be. 0 when idle.
+        self.last_rate_rad_s = 0.0
 
-    def feed(self, roll: float | None) -> list[ExtraAction]:
+    def feed(self, roll: float | None, now: float = 0.0) -> list[ExtraAction]:
         if roll is None:
             self._last = None
+            self._last_now = None
             self._resid = 0.0
+            self.last_rate_rad_s = 0.0
             return []
         if self._last is None:
             self._last = roll
+            self._last_now = now
             return []
         # wrap so a step across the atan2 seam isn't read as a huge jump
         delta = (roll - self._last + math.pi) % (2 * math.pi) - math.pi
+        dt = now - self._last_now if self._last_now is not None else 0.0
+        self.last_rate_rad_s = abs(delta) / dt if dt > 1e-6 else 0.0
         self._resid += delta
         self._last = roll
+        self._last_now = now
         out: list[ExtraAction] = []
         while self._resid >= self._step:
             out.append(ExtraAction.VOLUME_UP)
@@ -251,13 +282,20 @@ class ExtraGestures:
             return 0.0
         return self._dwell.progress
 
+    @property
+    def volume_twist_rate_deg_s(self) -> float:
+        """abs(deg/s) of the most recent volume-knob twist, 0 when off/paused/idle."""
+        if not self._volume_on or self.paused:
+            return 0.0
+        return math.degrees(self._volume.last_rate_rad_s)
+
     def reset_transient(self) -> None:
         """
         drop mid-gesture accumulation when the hand leaves view, WITHOUT
         touching the paused state (a dropped hand shouldn't silently un-pause).
         """
         self._zoom.feed(None)
-        self._volume.feed(None)
+        self._volume.feed(None, 0.0)
         self._dwell.feed(None, 0.0)
 
     def observe(self, sig: HandSignals, now: float) -> list[ExtraAction]:
@@ -274,7 +312,7 @@ class ExtraGestures:
         if self._zoom_on:
             actions += self._zoom.feed(sig.two_hand_pinch_span)
         if self._volume_on:
-            actions += self._volume.feed(sig.fist_roll_rad)
+            actions += self._volume.feed(sig.fist_roll_rad, now)
         if self._dwell_on:
             actions += self._dwell.feed(sig.hover_point, now)
         if self._confirm_on and self._confirm.feed(sig.thumbs_up, now):

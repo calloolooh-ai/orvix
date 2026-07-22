@@ -42,6 +42,7 @@ from orvix.extra_gestures import (
     is_halt_hand,
     is_thumbs_up,
     roll_from_normal,
+    scaled_volume_percent,
 )
 import math
 
@@ -282,16 +283,36 @@ def _execute_extras(
     mouse: MouseController,
     mapper: Mapper,
     settings: Settings,
+    extras: ExtraGestures | None = None,
 ) -> None:
+    if extras is None:
+        # callers that don't care about twist-rate scaling (e.g. most tests)
+        # can omit this; a fresh instance has rate 0, which scaled_volume_percent
+        # clamps to volume_step_percent, matching the old fixed-step behavior.
+        extras = ExtraGestures()
     for action in actions:
         if action == ExtraAction.ZOOM_IN:
             mouse.zoom(1)
         elif action == ExtraAction.ZOOM_OUT:
             mouse.zoom(-1)
         elif action == ExtraAction.VOLUME_UP:
-            mouse.set_volume_relative(settings.volume_step_percent)
+            pct = scaled_volume_percent(
+                extras.volume_twist_rate_deg_s,
+                settings.volume_step_percent,
+                settings.volume_max_percent,
+                settings.volume_rate_slow_deg_s,
+                settings.volume_rate_fast_deg_s,
+            )
+            mouse.set_volume_relative(pct)
         elif action == ExtraAction.VOLUME_DOWN:
-            mouse.set_volume_relative(-settings.volume_step_percent)
+            pct = scaled_volume_percent(
+                extras.volume_twist_rate_deg_s,
+                settings.volume_step_percent,
+                settings.volume_max_percent,
+                settings.volume_rate_slow_deg_s,
+                settings.volume_rate_fast_deg_s,
+            )
+            mouse.set_volume_relative(-pct)
         elif action == ExtraAction.DWELL_CLICK:
             mouse.click()
         elif action == ExtraAction.CONFIRM:
@@ -403,7 +424,7 @@ async def run_live(
             # signals and can pause everything. do them before cursor dispatch
             # so the "stop" pose can gate this frame.
             signals = _compute_signals(frame, hand, events, settings)
-            _execute_extras(extras.observe(signals, now), mouse, mapper, settings)
+            _execute_extras(extras.observe(signals, now), mouse, mapper, settings, extras)
 
             # feed the cursor dwell-countdown ring: send progress while it
             # climbs, and one hide when it ends. with cursor_ring_enabled, a

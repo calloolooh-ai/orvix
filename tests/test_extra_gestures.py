@@ -5,6 +5,8 @@ driven by synthetic per-frame signals.
 
 import math
 
+import pytest
+
 from orvix.extra_gestures import (
     ExtraAction,
     ExtraGestures,
@@ -12,6 +14,7 @@ from orvix.extra_gestures import (
     is_halt_hand,
     is_thumbs_up,
     roll_from_normal,
+    scaled_volume_percent,
 )
 
 
@@ -90,6 +93,50 @@ def test_twisting_the_fist_changes_volume():
     assert out.count(ExtraAction.VOLUME_UP) == 3
     back = ex.observe(HandSignals(fist_roll_rad=math.radians(10)), now=0.2)
     assert back.count(ExtraAction.VOLUME_DOWN) == 2
+
+
+def test_volume_twist_rate_is_zero_before_any_twist():
+    ex = make()
+    assert ex.volume_twist_rate_deg_s == 0.0
+
+
+def test_volume_twist_rate_tracks_degrees_per_second():
+    ex = make()
+    ex.observe(HandSignals(fist_roll_rad=0.0), now=0.0)
+    ex.observe(HandSignals(fist_roll_rad=math.radians(20)), now=0.5)  # 40 deg/s
+    assert ex.volume_twist_rate_deg_s == pytest.approx(40.0, abs=0.5)
+
+
+def test_volume_twist_rate_is_zero_when_volume_gesture_disabled():
+    ex = make(volume_enabled=False)
+    ex.observe(HandSignals(fist_roll_rad=0.0), now=0.0)
+    ex.observe(HandSignals(fist_roll_rad=math.radians(20)), now=0.5)
+    assert ex.volume_twist_rate_deg_s == 0.0
+
+
+def test_volume_twist_rate_resets_when_hand_drops_the_fist():
+    ex = make()
+    ex.observe(HandSignals(fist_roll_rad=0.0), now=0.0)
+    ex.observe(HandSignals(fist_roll_rad=math.radians(20)), now=0.5)
+    ex.observe(HandSignals(fist_roll_rad=None), now=0.6)  # let go of the fist
+    assert ex.volume_twist_rate_deg_s == 0.0
+
+
+# ---- proportional volume percent mapping ----
+
+def test_scaled_volume_percent_clamps_to_minimum_below_the_slow_threshold():
+    assert scaled_volume_percent(10.0, min_percent=5, max_percent=20, slow_deg_s=30.0, fast_deg_s=200.0) == 5
+
+
+def test_scaled_volume_percent_clamps_to_maximum_above_the_fast_threshold():
+    assert scaled_volume_percent(300.0, min_percent=5, max_percent=20, slow_deg_s=30.0, fast_deg_s=200.0) == 20
+
+
+def test_scaled_volume_percent_interpolates_between_the_thresholds():
+    # halfway between 30 and 200 deg/s -> halfway between 5 and 20 percent
+    # (12.5 rounds to 12: Python's round() is banker's rounding, half-to-even)
+    midpoint = (30.0 + 200.0) / 2
+    assert scaled_volume_percent(midpoint, min_percent=5, max_percent=20, slow_deg_s=30.0, fast_deg_s=200.0) == 12
 
 
 # ---- dwell ----
