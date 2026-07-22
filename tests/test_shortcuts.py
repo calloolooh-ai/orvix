@@ -67,3 +67,11 @@ def test_force_quit_is_cmd_alt_esc():
 
 def test_force_quit_is_opt_in_not_a_default_wedge():
     assert "force_quit" not in DEFAULT_RADIAL_ACTIONS
+
+
+def test_lock_screen_is_cmd_ctrl_q():
+    assert RADIAL_SHORTCUTS["lock_screen"] == Shortcut(12, ("cmd", "ctrl"))
+
+
+def test_lock_screen_is_opt_in_not_a_default_wedge():
+    assert "lock_screen" not in DEFAULT_RADIAL_ACTIONS

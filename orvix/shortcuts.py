@@ -26,6 +26,7 @@ KEY_Z = 6
 KEY_3 = 20
 KEY_UP = 126
 KEY_SPACE = 49
+KEY_Q = 12
 
 MODIFIERS = ("cmd", "shift", "ctrl", "alt")
 
@@ -60,6 +61,10 @@ RADIAL_SHORTCUTS: dict[str, Shortcut] = {
     "spotlight": Shortcut(KEY_SPACE, ("cmd",)),
     # same opt-in deal as spotlight. cmd+alt+esc opens the force quit dialog.
     "force_quit": Shortcut(KEY_ESCAPE, ("cmd", "alt")),
+    # same opt-in deal. cmd+ctrl+q is macOS's documented default "lock your
+    # mac immediately" shortcut, stable across recent macOS versions unlike
+    # show-desktop or notification-center's keybinds which vary by version.
+    "lock_screen": Shortcut(KEY_Q, ("cmd", "ctrl")),
 }
 
 # the default clockwise-from-top wedge layout, matching the overlay mock.
@@ -100,5 +105,6 @@ NAMED_SHORTCUT_LABELS: dict[str, str] = {
     "screenshot": "Screenshot",
     "spotlight": "Spotlight Search",
     "force_quit": "Force Quit",
+    "lock_screen": "Lock Screen",
     "confirm": "Return",
 }
