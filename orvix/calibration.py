@@ -132,17 +132,29 @@ async def wait_for_hand(preferred_hand: str, timeout: float = 30.0) -> None:
     start = time.monotonic()
     found = False
 
-    # break out and raise afterwards rather than raising from inside the
-    # loop body: stream_frames is an async generator that closes its
-    # websocket in a finally, and throwing through it mid-iteration trips
-    # "aclose(): asynchronous generator is already running" and buries the
-    # real message under a wall of asyncio traceback.
-    async for frame in stream_frames():
-        if pick_hand(frame, preferred_hand) is not None:
-            found = True
-            break
-        if time.monotonic() - start > timeout:
-            break
+    # bound each individual "get me the next frame" step with wait_for
+    # rather than only checking the clock after a frame arrives: if leapd
+    # is up but no physical device is plugged in at all, it never sends a
+    # single frame message, so a per-iteration clock check inside the loop
+    # body never runs and this would otherwise hang forever instead of
+    # timing out. closing the generator ourselves in the finally (once it's
+    # not suspended mid-await) avoids the "aclose(): asynchronous generator
+    # is already running" trap that throwing a cancellation into it would hit.
+    stream = stream_frames()
+    try:
+        while True:
+            remaining = timeout - (time.monotonic() - start)
+            if remaining <= 0:
+                break
+            try:
+                frame = await asyncio.wait_for(stream.__anext__(), timeout=remaining)
+            except (TimeoutError, StopAsyncIteration):
+                break
+            if pick_hand(frame, preferred_hand) is not None:
+                found = True
+                break
+    finally:
+        await stream.aclose()
 
     if not found:
         raise CalibrationError(

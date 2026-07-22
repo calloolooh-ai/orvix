@@ -15,6 +15,7 @@ from orvix.calibration import (
     build_box,
     collect_range,
     describe_box,
+    wait_for_hand,
 )
 
 
@@ -136,6 +137,32 @@ async def test_on_sample_is_optional(monkeypatch):
     # must not raise just because no callback was passed
     samples = await collect_range("right", duration=999.0)
     assert len(samples) == 2
+
+
+@pytest.mark.asyncio
+async def test_wait_for_hand_returns_once_the_hand_appears(monkeypatch):
+    positions = [None, None, (0.0, 100.0, 0.0)]
+    monkeypatch.setattr(calibration, "stream_frames", _fake_stream(positions))
+
+    # must not raise, and must not need to exhaust the full timeout
+    await wait_for_hand("right", timeout=999.0)
+
+
+@pytest.mark.asyncio
+async def test_wait_for_hand_times_out_if_leapd_never_sends_a_single_frame(monkeypatch):
+    # regression test: a physical device that's simply not plugged in means
+    # leapd's websocket never emits *any* message, not even a no-hands
+    # frame. the old implementation only checked the clock after a frame
+    # arrived, so this case hung forever instead of raising. an empty
+    # generator here stands in for "leapd connected, nothing ever sent".
+    async def _empty_gen(url=None):
+        return
+        yield  # pragma: no cover - makes this an async generator
+
+    monkeypatch.setattr(calibration, "stream_frames", _empty_gen)
+
+    with pytest.raises(CalibrationError, match="never saw a"):
+        await wait_for_hand("right", timeout=0.05)
 
 
 @pytest.mark.asyncio
