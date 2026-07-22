@@ -499,6 +499,15 @@ async def run_live(
             if radial_was_open:
                 radial_was_open = False
                 extras.reset_transient()
+                # interpreter.process_hand() was never called while the wheel
+                # was up, so a pinch that was mid-hold when it opened kept its
+                # original start timestamp -- resuming could otherwise read
+                # the drag-hold window as already elapsed and jump straight
+                # to a drag, or leave a real mouse-down stuck on. release it
+                # the same way a hand-loss would.
+                for stale_event in interpreter.reset():
+                    if _dispatch(stale_event, mapper, mouse, settings):
+                        flash_until = now + _CLICK_FLASH_SECONDS
 
             # fingertips are only needed to tell an index pinch from a middle
             # one for right clicks, so don't bother digging them out if the

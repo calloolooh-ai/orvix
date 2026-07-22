@@ -260,13 +260,19 @@ class GestureInterpreter:
 
         return events
 
-    def _handle_hand_lost(self) -> list[GestureEvent]:
+    def reset(self) -> list[GestureEvent]:
         """
-        hand dropped out of view. if we were mid-pinch or mid-grab, close
-        that out cleanly instead of leaving mouse_control thinking a button
-        is still held down forever.
+        force pinch/grab state back to idle, emitting release events for
+        anything that was actually held down. callers use this when the
+        interpreter resumes after a stretch it wasn't fed at all (e.g. the
+        radial menu owning the hand) -- without it, a pinch that was mid-hold
+        when the gap started keeps its original _pinch_started_at, and real
+        time elapsed during the gap can make the drag-hold check read as
+        satisfied the instant we resume, firing a drag the user never held
+        for. resetting to idle also means a real mouse-down from before the
+        gap gets released here instead of staying stuck on.
         """
-        events: list[GestureEvent] = [GestureEvent(GestureType.HAND_LOST)]
+        events: list[GestureEvent] = []
 
         if self._pinch_state != _PinchState.IDLE:
             events.insert(0, GestureEvent(GestureType.PINCH_UP))
@@ -276,5 +282,17 @@ class GestureInterpreter:
         if self._grabbing:
             events.insert(0, GestureEvent(GestureType.GRAB_END))
             self._grabbing = False
+
+        self._right_click_held = False
+        return events
+
+    def _handle_hand_lost(self) -> list[GestureEvent]:
+        """
+        hand dropped out of view. if we were mid-pinch or mid-grab, close
+        that out cleanly instead of leaving mouse_control thinking a button
+        is still held down forever.
+        """
+        events = self.reset()
+        events.append(GestureEvent(GestureType.HAND_LOST))
 
         return events

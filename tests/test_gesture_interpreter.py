@@ -187,3 +187,48 @@ def test_hand_lost_with_no_open_gesture_is_just_hand_lost():
     events = interpreter.process_hand(None)
     assert events == [events[0]]
     assert events[0].type == GestureType.HAND_LOST
+
+
+def test_reset_with_no_open_gesture_is_a_no_op():
+    interpreter = GestureInterpreter(Settings())
+    assert interpreter.reset() == []
+
+
+def test_reset_closes_out_open_pinch():
+    interpreter = GestureInterpreter(Settings())
+    interpreter.process_hand(make_hand(pinch=0.9))  # PINCH_DOWN
+
+    events = interpreter.reset()
+
+    assert [e.type for e in events] == [GestureType.PINCH_UP]
+
+
+def test_reset_closes_out_open_grab():
+    interpreter = GestureInterpreter(Settings())
+    interpreter.process_hand(make_hand(grab=0.9))  # GRAB_START
+
+    events = interpreter.reset()
+
+    assert [e.type for e in events] == [GestureType.GRAB_END]
+
+
+def test_reset_prevents_a_stale_mid_hold_from_becoming_an_instant_drag():
+    # regression test: without reset(), a pinch that was mid-hold (DOWN, not
+    # yet DRAGGING) when process_hand() stopped being called for a while (the
+    # radial menu owning the hand, in practice) would keep its original
+    # _pinch_started_at. real time elapsing during that gap could make the
+    # drag-hold check read as satisfied the instant we resume, firing
+    # PINCH_DRAG the user never actually held for.
+    settings = Settings()
+    settings.drag_hold_seconds = 10.0  # nowhere near elapsed in real test time
+    interpreter = GestureInterpreter(settings)
+
+    interpreter.process_hand(make_hand(pinch=0.9))  # PINCH_DOWN, starts the timer
+    interpreter.reset()  # simulates the radial-menu-close cleanup
+
+    # still pinching once control resumes: without reset() clearing the
+    # stale timer, and with enough elapsed time, this would read as
+    # "already held past drag_hold_seconds" and jump straight to DRAGGING
+    events = interpreter.process_hand(make_hand(pinch=0.9))
+
+    assert events[0].type == GestureType.PINCH_DOWN
