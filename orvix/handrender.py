@@ -24,10 +24,18 @@ projection: this deliberately mirrors coord_mapper.CoordMapper, the same
 absolute mapping orvix's real cursor uses, so the rendered hand moves across
 the screen exactly like the cursor does -- x_mm/y_mm through your calibration
 box (the same one `orvix calibrate` writes) straight onto screen x/y, full
-edge to edge. if you've calibrated, this is literally where your cursor would
-be. depth (z_mm) drives no position at all, only a size/brightness cue, so
-raising your hand moves the hand up the screen (not just bigger), matching
-what people expect after using the mouse-control pipeline.
+edge to edge. if you've calibrated, this is where your cursor would be *on
+the main display*. depth (z_mm) drives no position at all, only a
+size/brightness cue, so raising your hand moves the hand up the screen (not
+just bigger), matching what people expect after using the mouse-control
+pipeline.
+
+note: unlike the real cursor pipeline (which maps across every active
+display's combined bounds when multi_monitor is on, see displays.py), this
+visualizer's window only ever covers the main display -- it doesn't attempt
+the Quartz-to-Cocoa multi-screen coordinate math needed to span multiple
+monitors. on a multi-monitor setup with multi_monitor enabled, hand movement
+that would land the real cursor on a second screen won't show up here.
 """
 
 from __future__ import annotations
