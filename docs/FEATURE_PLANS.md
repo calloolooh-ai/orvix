@@ -4,7 +4,9 @@ Architecture plans for the 8 candidate features from [`COMPETITIVE_RESEARCH.md`]
 
 ---
 
-## 1. Proportional scroll/volume rate tied to gesture magnitude
+## 1. Proportional scroll/volume rate tied to gesture magnitude — **DONE**
+
+scroll already scales off `palm_velocity` (`main.py:149`), and volume-twist rate scaling shipped separately (`extra_gestures.py:scaled_volume_percent`, config fields `volume_max_percent`/`volume_rate_slow_deg_s`/`volume_rate_fast_deg_s`). plan below kept for the original architecture reasoning.
 
 **Goal:** make grab-scroll speed and fist-twist-volume speed scale continuously with how fast/hard the gesture is being done, instead of firing fixed-size steps.
 
