@@ -67,14 +67,41 @@ def isolated_app(monkeypatch, tmp_path):
     an OrvixApp built against a throwaway Settings() and a save_config that
     just records calls instead of writing anywhere, so tests can drive menu
     callbacks freely without any risk to the real machine's config.
+
+    profiles are backed by an in-memory dict rather than the real
+    ~/.orvix/profiles directory, same reasoning as save_config above.
     """
+    from orvix.config import _validate_profile_name
+
     monkeypatch.setattr(gui, "load_config", lambda: Settings())
     saved = []
     monkeypatch.setattr(gui, "save_config", lambda settings, *a, **k: saved.append(settings))
     monkeypatch.setattr(gui, "DEFAULT_CONFIG_PATH", tmp_path / "config.yaml")
 
+    profiles: dict = {}
+
+    def _save_profile(name, settings):
+        _validate_profile_name(name)
+        profiles[name] = settings
+
+    def _load_profile(name):
+        if name not in profiles:
+            raise FileNotFoundError(name)
+        return profiles[name]
+
+    def _delete_profile(name):
+        if name not in profiles:
+            raise FileNotFoundError(name)
+        del profiles[name]
+
+    monkeypatch.setattr(gui, "list_profiles", lambda: sorted(profiles))
+    monkeypatch.setattr(gui, "save_profile", _save_profile)
+    monkeypatch.setattr(gui, "load_profile", _load_profile)
+    monkeypatch.setattr(gui, "delete_profile", _delete_profile)
+
     app = gui.OrvixApp()
     app._test_saved = saved
+    app._test_profiles = profiles
     return app
 
 
@@ -149,3 +176,100 @@ def test_dry_run_toggle_flips_independently_of_settings(isolated_app):
 
     assert bool(sender.state) is True
     assert bool(isolated_app.dry_run.state) is True
+
+
+# -- profiles menu --
+
+
+def test_profiles_menu_starts_with_only_save_option(isolated_app):
+    titles = [item.title for item in isolated_app.profiles_menu.values()]
+    assert titles == ["Save current as..."]
+
+
+def test_save_profile_as_adds_it_to_the_menu(isolated_app, monkeypatch):
+    monkeypatch.setattr(gui.rumps, "Window", lambda **kw: _FakeWindow("my-profile"))
+
+    isolated_app._save_profile_as(None)
+
+    assert "my-profile" in isolated_app._test_profiles
+    titles = [getattr(item, "title", None) for item in isolated_app.profiles_menu.values()]
+    assert "my-profile" in titles
+    assert "Delete..." in titles
+
+
+def test_save_profile_as_does_nothing_on_cancel(isolated_app, monkeypatch):
+    monkeypatch.setattr(gui.rumps, "Window", lambda **kw: _FakeWindow("ignored", clicked=False))
+
+    isolated_app._save_profile_as(None)
+
+    assert isolated_app._test_profiles == {}
+
+
+def test_save_profile_as_rejects_an_invalid_name(isolated_app, monkeypatch):
+    monkeypatch.setattr(gui.rumps, "Window", lambda **kw: _FakeWindow("bad/name"))
+    alerts = []
+    monkeypatch.setattr(gui.rumps, "alert", lambda title, message: alerts.append(message))
+
+    isolated_app._save_profile_as(None)
+
+    assert isolated_app._test_profiles == {}
+    assert len(alerts) == 1
+
+
+def test_load_profile_setter_replaces_settings_and_saves(isolated_app):
+    other = Settings(cursor_mode="tilt", multi_monitor=False)
+    isolated_app._test_profiles["work"] = other
+
+    isolated_app._make_profile_load_setter("work")(None)
+
+    assert isolated_app.settings is other
+    assert bool(isolated_app.multi_monitor_toggle.state) is False
+    checked_mode = [i.title for i in isolated_app.mode_menu.values() if i.state]
+    assert checked_mode == [gui.CURSOR_MODE_LABELS["tilt"]]
+    assert len(isolated_app._test_saved) == 1
+
+
+def test_load_profile_setter_handles_a_since_deleted_profile(isolated_app, monkeypatch):
+    monkeypatch.setattr(gui.rumps, "alert", lambda *a, **k: None)
+
+    isolated_app._make_profile_load_setter("gone")(None)
+
+    # nothing blew up, and settings weren't touched
+    assert isolated_app.settings.cursor_mode == "relative"
+
+
+def test_delete_profile_setter_removes_it_when_confirmed(isolated_app, monkeypatch):
+    isolated_app._test_profiles["temp"] = Settings()
+    isolated_app._rebuild_profiles_menu()
+    monkeypatch.setattr(gui.rumps, "alert", lambda *a, **k: 1)
+
+    isolated_app._make_profile_delete_setter("temp")(None)
+
+    assert "temp" not in isolated_app._test_profiles
+
+
+def test_delete_profile_setter_keeps_it_when_cancelled(isolated_app, monkeypatch):
+    isolated_app._test_profiles["temp"] = Settings()
+    isolated_app._rebuild_profiles_menu()
+    monkeypatch.setattr(gui.rumps, "alert", lambda *a, **k: 0)
+
+    isolated_app._make_profile_delete_setter("temp")(None)
+
+    assert "temp" in isolated_app._test_profiles
+
+
+class _FakeWindow:
+    """stand-in for rumps.Window so tests never pop a real text-input dialog."""
+
+    def __init__(self, text, clicked=True):
+        self._text = text
+        self._clicked = clicked
+
+    def run(self):
+        return _FakeResponse(self._text, self._clicked)
+
+
+class _FakeResponse:
+    def __init__(self, text, clicked):
+        self.text = text
+        self.clicked = clicked

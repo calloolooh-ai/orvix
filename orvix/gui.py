@@ -30,7 +30,16 @@ from Foundation import NSObject
 
 from orvix import calibration
 from orvix.calibration_viz import BoundsTracker, coverage_rect, marker_fraction
-from orvix.config import DEFAULT_CONFIG_PATH, Settings, load_config, save_config
+from orvix.config import (
+    DEFAULT_CONFIG_PATH,
+    Settings,
+    delete_profile,
+    list_profiles,
+    load_config,
+    load_profile,
+    save_config,
+    save_profile,
+)
 from orvix import onboarding
 from orvix.gesture_interpreter import GestureEvent
 from orvix.leap_client import LeapConnectionError
@@ -88,6 +97,7 @@ EXTRA_GESTURE_TOGGLES = [
     ("Palms-out pause", "palms_out_pause_enabled"),
     ("Thumbs-up confirm", "thumbs_up_confirm_enabled"),
 ]
+_EXTRA_GESTURE_ATTR_BY_LABEL = dict(EXTRA_GESTURE_TOGGLES)
 
 
 def _dwell_label_for(settings: Settings) -> str:
@@ -293,6 +303,11 @@ class OrvixApp(rumps.App):
                 rumps.MenuItem(label, callback=self._make_thumbs_up_setter(name))
             )
 
+        # named, saved snapshots of the whole settings file -- "demo" vs
+        # "daily use" vs whatever -- swappable without hand-editing yaml.
+        self.profiles_menu = rumps.MenuItem("Profiles...")
+        self._rebuild_profiles_menu()
+
         self._refresh_action_checkmarks()
 
         self.menu = [
@@ -312,6 +327,8 @@ class OrvixApp(rumps.App):
             self.dwell_menu,
             self.extras_menu,
             self.thumbs_menu,
+            None,
+            self.profiles_menu,
             None,
             rumps.MenuItem("Calibrate...", callback=self._calibrate),
             None,
@@ -500,6 +517,87 @@ class OrvixApp(rumps.App):
         active_thumbs = NAMED_SHORTCUT_LABELS.get(self.settings.thumbs_up_action)
         for item in self.thumbs_menu.values():
             item.state = active_thumbs == item.title
+        self.multi_monitor_toggle.state = self.settings.multi_monitor
+        self.radial_toggle.state = self.settings.radial_menu_enabled
+        for item in self.extras_menu.values():
+            attr = _EXTRA_GESTURE_ATTR_BY_LABEL.get(item.title)
+            if attr is not None:
+                item.state = bool(getattr(self.settings, attr))
+
+    def _rebuild_profiles_menu(self) -> None:
+        # rumps only allocates the submenu's backing NSMenu on the first add(),
+        # so clear() blows up on a MenuItem that's never had anything added yet
+        if self.profiles_menu._menu is not None:
+            self.profiles_menu.clear()
+        names = list_profiles()
+        for name in names:
+            self.profiles_menu.add(
+                rumps.MenuItem(name, callback=self._make_profile_load_setter(name))
+            )
+        if names:
+            self.profiles_menu.add(rumps.separator)
+        self.profiles_menu.add(rumps.MenuItem("Save current as...", callback=self._save_profile_as))
+        if names:
+            delete_menu = rumps.MenuItem("Delete...")
+            for name in names:
+                delete_menu.add(
+                    rumps.MenuItem(name, callback=self._make_profile_delete_setter(name))
+                )
+            self.profiles_menu.add(delete_menu)
+
+    def _apply_loaded_settings(self) -> None:
+        """settings changed wholesale (profile load): sync every checkmark and
+        restart the pipeline if it's running, same as any single setter that
+        touches a start-time-only field like cursor mode or multi-monitor."""
+        save_config(self.settings)
+        self._refresh_action_checkmarks()
+        if self.worker.running:
+            dry_run = bool(self.dry_run.state)
+            self.worker.stop(wait=True)
+            self.worker.start(self.settings, dry_run=dry_run)
+
+    def _make_profile_load_setter(self, name: str):
+        def _load(sender: rumps.MenuItem) -> None:
+            try:
+                self.settings = load_profile(name)
+            except FileNotFoundError:
+                rumps.alert("orvix", f"profile {name!r} is gone -- refreshing the list.")
+                self._rebuild_profiles_menu()
+                return
+            self._apply_loaded_settings()
+
+        return _load
+
+    def _save_profile_as(self, sender: rumps.MenuItem) -> None:
+        response = rumps.Window(
+            title="Save profile",
+            message="name this profile (letters, digits, - and _ only):",
+            default_text="",
+        ).run()
+        name = response.text.strip() if response.clicked else ""
+        if not name:
+            return
+        try:
+            save_profile(name, self.settings)
+        except ValueError as exc:
+            rumps.alert("orvix", str(exc))
+            return
+        self._rebuild_profiles_menu()
+
+    def _make_profile_delete_setter(self, name: str):
+        def _delete(sender: rumps.MenuItem) -> None:
+            confirmed = rumps.alert(
+                "orvix", f"delete profile {name!r}? this can't be undone.", ok="Delete", cancel="Cancel"
+            )
+            if confirmed != 1:
+                return
+            try:
+                delete_profile(name)
+            except FileNotFoundError:
+                pass
+            self._rebuild_profiles_menu()
+
+        return _delete
 
     def _calibrate(self, sender: rumps.MenuItem) -> None:
         if self.worker.running:
