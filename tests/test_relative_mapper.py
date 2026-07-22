@@ -184,3 +184,32 @@ def test_update_screen_bounds_changes_future_clamp_bounds():
     out = drive(m, [(i * 50.0, 0.0) for i in range(50)])
     for x, _y in out:
         assert x >= 1920
+
+
+# -- _gain: a hand-edited config could set fast_speed <= slow_speed --
+
+
+def test_gain_with_equal_slow_and_fast_speed_does_not_crash():
+    s = Settings(relative_slow_speed=100.0, relative_fast_speed=100.0)
+    m = RelativeCoordMapper(1920, 1080, s)
+    # would previously divide by zero the moment a frame lands exactly at
+    # (or above) that speed and below neither flat branch
+    assert m._gain(100.0) in (s.relative_min_gain, s.relative_max_gain)
+
+
+def test_gain_with_inverted_slow_and_fast_speed_stays_bounded():
+    s = Settings(relative_slow_speed=500.0, relative_fast_speed=50.0, relative_min_gain=3.0, relative_max_gain=18.0)
+    m = RelativeCoordMapper(1920, 1080, s)
+    # previously an unclamped, potentially negative-span t could push gain
+    # outside [min_gain, max_gain] or even negative
+    for speed in (0.0, 50.0, 100.0, 300.0, 500.0, 1000.0):
+        gain = m._gain(speed)
+        assert s.relative_min_gain <= gain <= s.relative_max_gain
+
+
+def test_gain_normal_case_still_interpolates_linearly():
+    s = Settings(relative_slow_speed=50.0, relative_fast_speed=600.0, relative_min_gain=3.0, relative_max_gain=18.0)
+    m = RelativeCoordMapper(1920, 1080, s)
+    midpoint_speed = (s.relative_slow_speed + s.relative_fast_speed) / 2
+    gain = m._gain(midpoint_speed)
+    assert abs(gain - (s.relative_min_gain + s.relative_max_gain) / 2) < 1e-6

@@ -192,13 +192,20 @@ class RelativeCoordMapper:
         px per mm at this hand speed. flat below slow_speed, flat above
         fast_speed, linear between. the point is that slow deliberate moves
         stay precise while fast ones can still cross a wide screen.
+
+        guards the same way TiltCoordMapper._deflection does: a misconfigured
+        relative_fast_speed <= relative_slow_speed (typo'd or swapped in a
+        hand-edited config) would otherwise divide by zero or a negative
+        span, crashing the live tracking thread or producing an inverted,
+        unclamped gain instead of a flat one.
         """
         s = self._settings
         if speed_mm_s <= s.relative_slow_speed:
             return s.relative_min_gain
         if speed_mm_s >= s.relative_fast_speed:
             return s.relative_max_gain
-        t = (speed_mm_s - s.relative_slow_speed) / (s.relative_fast_speed - s.relative_slow_speed)
+        span = max(1e-6, s.relative_fast_speed - s.relative_slow_speed)
+        t = _clamp((speed_mm_s - s.relative_slow_speed) / span, 0.0, 1.0)
         return s.relative_min_gain + t * (s.relative_max_gain - s.relative_min_gain)
 
     def map_to_screen(
