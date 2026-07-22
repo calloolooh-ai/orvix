@@ -422,6 +422,16 @@ async def run_live(
     # when the countdown ends rather than a None every idle frame
     dwell_shown = False
 
+    # extras.observe() is never called while the radial menu owns the hand
+    # (see the early continue below), so dwell/confirm/zoom/volume timers sit
+    # frozen with stale timestamps for however long the wheel was open -- the
+    # same staleness problem the pause/resume fix (see observe()'s "resuming"
+    # branch) solves for palms-out pause. this flag lets us catch the closing
+    # edge and reset those timers once, so a dwell hold that would otherwise
+    # read as "already elapsed" doesn't fire a phantom click the instant the
+    # wheel closes.
+    radial_was_open = False
+
     # monotonic deadline for the click-flash (see _CLICK_FLASH_SECONDS): 0.0
     # means no flash pending
     flash_until = 0.0
@@ -472,6 +482,7 @@ async def run_live(
             # and pinch/dwell to pick. skip the normal cursor pipeline so we
             # don't also move the cursor or click underneath the wheel.
             if radial.is_open:
+                radial_was_open = True
                 # the dwell/cursor-ring feed below is skipped for as long as
                 # the wheel stays open, so hide it once on the way in instead
                 # of leaving it frozen at wherever the cursor was when the
@@ -484,6 +495,10 @@ async def run_live(
                     radial, hand, mapper, mouse, settings, now, on_radial, radial_anchor
                 )
                 continue
+
+            if radial_was_open:
+                radial_was_open = False
+                extras.reset_transient()
 
             # fingertips are only needed to tell an index pinch from a middle
             # one for right clicks, so don't bother digging them out if the
