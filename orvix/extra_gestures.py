@@ -297,14 +297,24 @@ class ExtraGestures:
         self._zoom.feed(None)
         self._volume.feed(None, 0.0)
         self._dwell.feed(None, 0.0)
+        self._confirm.feed(False, 0.0)
 
     def observe(self, sig: HandSignals, now: float) -> list[ExtraAction]:
         actions: list[ExtraAction] = []
 
         # pause toggle runs first and always, so it works even while paused
         if self._pause_on and self._pause.feed(sig.palms_out, now):
+            resuming = self.paused
             self.paused = not self.paused
             actions.append(ExtraAction.PAUSE_ON if self.paused else ExtraAction.PAUSE_OFF)
+            if resuming:
+                # zoom/volume/dwell/confirm never got fed while paused (see the
+                # early return below), so their anchors and timestamps are
+                # stale by however long the pause lasted. without this, coming
+                # back can fire a spurious action instantly -- e.g. a dwell
+                # timer that reads as already-elapsed, or a confirm hold that
+                # "completes" the moment thumbs-up is next observed.
+                self.reset_transient()
 
         if self.paused:
             return actions  # everything else is off until you resume

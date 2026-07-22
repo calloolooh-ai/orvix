@@ -209,6 +209,52 @@ def test_second_palms_out_resumes():
     assert not ex.paused
 
 
+def test_resuming_from_pause_does_not_fire_a_stale_dwell_click():
+    # regression: while paused, the dwell detector's feed() is never called
+    # (observe() returns early), so its anchor/timer are frozen. if the pause
+    # lasts longer than dwell_seconds, resuming used to make (now - _since)
+    # read as already-elapsed, firing an instant unrequested click the frame
+    # tracking resumes even though the user never actually held still.
+    ex = make(pause_hold_seconds=0.4, dwell_seconds=0.6)
+    point = (100.0, 100.0)
+    ex.observe(HandSignals(hover_point=point), now=0.0)  # dwell anchor set
+    ex.observe(HandSignals(palms_out=True), now=0.1)
+    ex.observe(HandSignals(palms_out=True), now=0.51)  # pause on
+    assert ex.paused
+    # a long pause -- much longer than dwell_seconds -- during which the
+    # dwell anchor/timer are frozen, not advanced
+    ex.observe(HandSignals(palms_out=True), now=1.0)
+    ex.observe(HandSignals(palms_out=False), now=1.1)  # drop pose
+    ex.observe(HandSignals(palms_out=True), now=1.2)
+    out_resume = ex.observe(HandSignals(palms_out=True), now=1.61)  # pause off
+    assert out_resume == [ExtraAction.PAUSE_OFF]
+    assert not ex.paused
+    # first frame back, still hovering the same point: should just resume a
+    # fresh dwell countdown, not instantly fire from the stale timer
+    out = ex.observe(HandSignals(hover_point=point), now=1.62)
+    assert out == []
+    assert ex.dwell_progress < 1.0
+
+
+def test_resuming_from_pause_does_not_fire_a_stale_confirm():
+    # same staleness bug, for the thumbs-up confirm hold: a thumbs-up held
+    # continuously through a pause used to "complete" instantly on resume
+    # because its hold timer never got reset while paused.
+    ex = make(pause_hold_seconds=0.4, confirm_hold_seconds=0.4)
+    ex.observe(HandSignals(thumbs_up=True), now=0.0)  # confirm hold starts
+    ex.observe(HandSignals(palms_out=True), now=0.1)
+    ex.observe(HandSignals(palms_out=True), now=0.51)  # pause on
+    assert ex.paused
+    ex.observe(HandSignals(palms_out=True), now=1.0)
+    ex.observe(HandSignals(palms_out=False), now=1.1)  # drop pose
+    ex.observe(HandSignals(palms_out=True), now=1.2)
+    out_resume = ex.observe(HandSignals(palms_out=True), now=1.61)  # pause off
+    assert out_resume == [ExtraAction.PAUSE_OFF]
+    assert not ex.paused
+    out = ex.observe(HandSignals(thumbs_up=True), now=1.62)
+    assert out == []
+
+
 # ---- confirm ----
 
 def test_thumbs_up_hold_confirms_once():
