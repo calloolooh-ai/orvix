@@ -362,9 +362,31 @@ _NONNEGATIVE_SECONDS_FIELDS = (
 )
 
 
+def _field_default(field: str):
+    """the dataclass-declared default for a Settings field, for fallback."""
+    for f in dataclasses.fields(Settings):
+        if f.name == field:
+            return f.default
+    raise KeyError(field)  # pragma: no cover - only hit for a typo'd field name above
+
+
 def _clamp_field(settings: Settings, field: str, lo: float, hi: float) -> None:
     value = getattr(settings, field)
-    clamped = max(lo, min(hi, value))
+    try:
+        clamped = max(lo, min(hi, value))
+    except TypeError:
+        # not just out-of-range but the wrong type entirely (e.g. a hand-edited
+        # config.yaml with `pinch_threshold: "high"`) -- max()/min() would
+        # otherwise raise straight out of load_config, and unlike the GUI
+        # (which wraps load_config in a try/except, see gui.py's _safe_load_config)
+        # the CLI (`orvix cli`) calls it with nothing catching this at all.
+        default = _field_default(field)
+        logger.warning(
+            "config field %r was %r (%s), not a number -- falling back to %r",
+            field, value, type(value).__name__, default,
+        )
+        setattr(settings, field, default)
+        return
     if clamped != value:
         logger.warning(
             "config field %r was %r, outside [%s, %s] -- clamping to %r",

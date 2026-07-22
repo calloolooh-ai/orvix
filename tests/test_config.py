@@ -5,6 +5,7 @@ a config.yaml on disk) doesn't blow up load_config.
 """
 
 import pytest
+import yaml
 
 from orvix.config import (
     Settings,
@@ -45,6 +46,38 @@ def test_load_config_clamps_negative_durations(tmp_path):
 
     assert loaded.dwell_click_seconds == 0.0
     assert loaded.confirm_hold_seconds == 0.0
+
+
+def test_load_config_falls_back_on_wrong_type_threshold(tmp_path):
+    # a hand-edited config.yaml can hold any YAML scalar, not just the right
+    # type -- `pinch_threshold: "high"` parses fine as a string and used to
+    # raise TypeError out of load_config's clamp step (str vs float
+    # comparison), crashing `orvix cli` outright since only the GUI wraps
+    # load_config in a try/except.
+    path = tmp_path / "config.yaml"
+    path.write_text(yaml.safe_dump({"pinch_threshold": "high"}))
+
+    loaded = load_config(path)
+
+    assert loaded.pinch_threshold == Settings().pinch_threshold
+
+
+def test_load_config_falls_back_on_wrong_type_percent(tmp_path):
+    path = tmp_path / "config.yaml"
+    path.write_text(yaml.safe_dump({"volume_max_percent": [1, 2, 3]}))
+
+    loaded = load_config(path)
+
+    assert loaded.volume_max_percent == Settings().volume_max_percent
+
+
+def test_load_config_falls_back_on_wrong_type_duration(tmp_path):
+    path = tmp_path / "config.yaml"
+    path.write_text(yaml.safe_dump({"dwell_click_seconds": None}))
+
+    loaded = load_config(path)
+
+    assert loaded.dwell_click_seconds == Settings().dwell_click_seconds
 
 
 def test_load_config_leaves_sane_values_untouched(tmp_path):
