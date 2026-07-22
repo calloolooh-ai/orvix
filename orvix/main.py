@@ -472,6 +472,14 @@ async def run_live(
             # and pinch/dwell to pick. skip the normal cursor pipeline so we
             # don't also move the cursor or click underneath the wheel.
             if radial.is_open:
+                # the dwell/cursor-ring feed below is skipped for as long as
+                # the wheel stays open, so hide it once on the way in instead
+                # of leaving it frozen at wherever the cursor was when the
+                # wheel popped open -- otherwise it sits there stale while
+                # the wheel itself moves the cursor around to point at wedges
+                if on_dwell is not None and dwell_shown:
+                    on_dwell(None)
+                    dwell_shown = False
                 radial_anchor = _fire_radial(
                     radial, hand, mapper, mouse, settings, now, on_radial, radial_anchor
                 )
