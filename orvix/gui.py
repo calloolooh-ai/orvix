@@ -448,6 +448,11 @@ class OrvixApp(rumps.App):
             # actually driving the cursor.
             if self.worker.running:
                 dry_run = bool(self.dry_run.state)
+                # stop(wait=True) blocks this thread up to 2s (see
+                # PipelineWorker.stop) with the menu otherwise showing nothing
+                # different, which reads as a hang the same way the old
+                # calibration wait phase did. say so while it happens.
+                self.status_item.title = "status: restarting..."
                 self.worker.stop(wait=True)
                 self.worker.start(self.settings, dry_run=dry_run)
 
@@ -462,6 +467,7 @@ class OrvixApp(rumps.App):
         # pipeline starts, so the change is invisible until it restarts.
         if self.worker.running:
             dry_run = bool(self.dry_run.state)
+            self.status_item.title = "status: restarting..."
             self.worker.stop(wait=True)
             self.worker.start(self.settings, dry_run=dry_run)
 
@@ -507,6 +513,7 @@ class OrvixApp(rumps.App):
             # apply, same as cursor mode and radial dwell.
             if self.worker.running:
                 dry_run = bool(self.dry_run.state)
+                self.status_item.title = "status: restarting..."
                 self.worker.stop(wait=True)
                 self.worker.start(self.settings, dry_run=dry_run)
 
@@ -525,6 +532,7 @@ class OrvixApp(rumps.App):
             # menu claiming one dwell while another is live.
             if self.worker.running:
                 dry_run = bool(self.dry_run.state)
+                self.status_item.title = "status: restarting..."
                 self.worker.stop(wait=True)
                 self.worker.start(self.settings, dry_run=dry_run)
 
@@ -596,6 +604,7 @@ class OrvixApp(rumps.App):
         self._refresh_action_checkmarks()
         if self.worker.running:
             dry_run = bool(self.dry_run.state)
+            self.status_item.title = "status: restarting..."
             self.worker.stop(wait=True)
             self.worker.start(self.settings, dry_run=dry_run)
 

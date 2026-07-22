@@ -210,6 +210,60 @@ def test_multi_monitor_toggle_flips_the_setting(isolated_app):
     assert bool(sender.state) is False
 
 
+class _FakeRunningWorker:
+    """stands in for a PipelineWorker that's mid-flight, so stop(wait=True)
+    followed by start() can be asserted on without spinning up a real
+    asyncio thread. stop(wait=True) is what actually blocks the main/menu
+    thread for up to 2s (see PipelineWorker.stop) -- that's the whole reason
+    these restart paths need a status update before calling it."""
+
+    def __init__(self):
+        self.running = True
+        self.stop_calls = []
+        self.start_calls = []
+
+    def stop(self, wait=False):
+        self.stop_calls.append(wait)
+
+    def start(self, settings, dry_run):
+        self.start_calls.append((settings, dry_run))
+
+
+class _FakeMenuItem:
+    """bare sender stand-in for callbacks that only touch sender.state."""
+
+    def __init__(self):
+        self.state = False
+
+
+@pytest.mark.parametrize(
+    "trigger",
+    [
+        lambda app: app._make_mode_setter("tilt")(None),
+        lambda app: app._toggle_multi_monitor(app.multi_monitor_toggle),
+        lambda app: app._make_extra_toggle("zoom_enabled")(_FakeMenuItem()),
+        lambda app: app._make_dwell_setter("0.6s")(None),
+        lambda app: app._apply_loaded_settings(),
+    ],
+    ids=["cursor_mode", "multi_monitor", "extra_toggle", "dwell", "profile_load"],
+)
+def test_every_pipeline_restart_path_shows_restarting_status_first(isolated_app, trigger):
+    # stop(wait=True) blocks up to 2s with the menu otherwise unchanged,
+    # which reads as a hang the same way the pre-fix calibration wait phase
+    # did (see test_run_calibration_shows_waiting_for_hand_before_the_blocking_call).
+    # cycle 32's click-flash only covered one of several action paths at
+    # first and had to be patched again after the fact -- fix every restart
+    # site in this same pass instead of repeating that.
+    fake_worker = _FakeRunningWorker()
+    isolated_app.worker = fake_worker
+
+    trigger(isolated_app)
+
+    assert fake_worker.stop_calls == [True]
+    assert len(fake_worker.start_calls) == 1
+    assert isolated_app.status_item.title == "status: restarting..."
+
+
 def test_cursor_ring_toggle_reflects_settings_default_off(isolated_app):
     assert bool(isolated_app.cursor_ring_toggle.state) is False
 
