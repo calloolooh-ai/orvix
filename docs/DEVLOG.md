@@ -87,4 +87,12 @@ fixed all three, then went and checked pause/resume and hand drop for the same c
 - did a full sweep for any other "async for" over a leapd stream that could hang the same way calibration did, found nothing else needs fixing, the pattern is closed out now
 - reread config.py and extra_gestures.py for redundant logic from being patched so many times, both still hold up clean
 
-~55 cycles total, 45ish commits. full history in git log if you want the exact diffs.
+## more code quality + final checks
+
+- reread coord_mapper.py and calibration.py for the same kind of redundancy, found some surface-level duplication but decided not to touch it since the "duplicate" code actually differs in subtle edge case handling, would've been a risky refactor for basically nothing
+- brought this devlog itself up to date after it went stale for a while
+- re-ran the live cli checks (orvix status, orvix cli --dry-run) and the real menu bar app one more time as a regression check after ~30 more cycles of changes, everything still holds up clean
+- traced the new shortcuts (spotlight, force quit, lock screen) through the radial menu fire path on purpose, confirmed they get treated exactly like the original 7 wedges, no special casing that could've been missed
+- did a full 60 cycle retrospective: all 6 planned features done, 3 bug families fully closed out, codebase is in a solid, well tested state at this point. still finding the occasional small thing but the big stuff is done
+
+~60 cycles total, 50ish commits. full history in git log if you want the exact diffs.
