@@ -18,6 +18,9 @@ from pathlib import Path
 import yaml
 
 from orvix.shortcuts import DEFAULT_RADIAL_ACTIONS as _DEFAULT_RADIAL_ACTIONS
+from orvix.shortcuts import RADIAL_SHORTCUTS as _RADIAL_SHORTCUTS
+
+_VALID_RADIAL_ACTIONS = frozenset({*_RADIAL_SHORTCUTS, "close"})
 
 logger = logging.getLogger(__name__)
 
@@ -363,6 +366,37 @@ def _clamp_field(settings: Settings, field: str, lo: float, hi: float) -> None:
         setattr(settings, field, clamped)
 
 
+def _sanitize_radial_actions(settings: Settings) -> None:
+    """
+    drop any wedge name that isn't a real shortcuts.RADIAL_SHORTCUTS entry (or
+    "close"), same silent-misbehavior-otherwise reasoning as _clamp_field: an
+    unknown action still fires (main.py's RADIAL_SHORTCUTS.get() takes it),
+    it just closes the wheel and does nothing, which is confusing to debug.
+    worse, RadialMenu(actions=[]) raises outright if every entry gets filtered
+    (or the list was already empty), which would otherwise crash pipeline
+    startup instead of just clamping like everything else here -- so an empty
+    result falls back to the full default wedge set instead.
+    """
+    actions = settings.radial_actions
+    valid = [a for a in actions if a in _VALID_RADIAL_ACTIONS]
+    if valid == actions and actions:
+        return
+    dropped = [a for a in actions if a not in _VALID_RADIAL_ACTIONS]
+    if not valid:
+        logger.warning(
+            "config field 'radial_actions' had no valid entries (dropped %r) -- "
+            "falling back to the default wedge set",
+            dropped,
+        )
+        settings.radial_actions = list(_DEFAULT_RADIAL_ACTIONS)
+    else:
+        logger.warning(
+            "config field 'radial_actions' had unknown entries %r -- dropping them",
+            dropped,
+        )
+        settings.radial_actions = valid
+
+
 def _sanitize_settings(settings: Settings) -> Settings:
     """
     clamp fields that would otherwise silently misbehave instead of raising --
@@ -376,6 +410,7 @@ def _sanitize_settings(settings: Settings) -> Settings:
         _clamp_field(settings, field, 0, 100)
     for field in _NONNEGATIVE_SECONDS_FIELDS:
         _clamp_field(settings, field, 0.0, float("inf"))
+    _sanitize_radial_actions(settings)
     return settings
 
 

@@ -69,6 +69,44 @@ def test_multi_monitor_defaults_to_true():
     assert Settings().multi_monitor is True
 
 
+def test_load_config_drops_unknown_radial_actions(tmp_path):
+    path = tmp_path / "config.yaml"
+    save_config(Settings(radial_actions=["undo", "typo_action", "copy"]), path)
+
+    loaded = load_config(path)
+
+    assert loaded.radial_actions == ["undo", "copy"]
+
+
+def test_load_config_falls_back_to_defaults_when_all_radial_actions_invalid(tmp_path):
+    path = tmp_path / "config.yaml"
+    save_config(Settings(radial_actions=["nonsense", "still_nonsense"]), path)
+
+    loaded = load_config(path)
+
+    assert loaded.radial_actions == list(Settings().radial_actions)
+    assert loaded.radial_actions  # never empty
+
+
+def test_load_config_falls_back_when_radial_actions_is_empty(tmp_path):
+    path = tmp_path / "config.yaml"
+    save_config(Settings(radial_actions=[]), path)
+
+    loaded = load_config(path)
+
+    assert loaded.radial_actions == list(Settings().radial_actions)
+
+
+def test_load_config_leaves_valid_radial_actions_untouched(tmp_path):
+    path = tmp_path / "config.yaml"
+    custom = ["copy", "paste", "close"]
+    save_config(Settings(radial_actions=custom), path)
+
+    loaded = load_config(path)
+
+    assert loaded.radial_actions == custom
+
+
 def test_save_then_load_round_trips_multi_monitor(tmp_path):
     path = tmp_path / "config.yaml"
     save_config(Settings(multi_monitor=False), path)
