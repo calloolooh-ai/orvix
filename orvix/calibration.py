@@ -57,6 +57,15 @@ Z_PADDING_MM = 40.0
 # always means the hand wasn't actually over the sensor
 MIN_SAMPLES = 100
 
+# how long to wait for the next frame once a sweep/tilt-read is already
+# underway before deciding the leap disappeared partway through (unplugged,
+# bad cable) rather than just being between hand-visible frames. same
+# reasoning as wait_for_hand's per-message wait_for: a device that goes
+# silent mid-collection would otherwise hang the plain `async for` forever,
+# since a missing physical device means leapd never emits anything at all,
+# not even a no-hands frame.
+STALL_TIMEOUT_SECONDS = 5.0
+
 # a range this small means you didn't really sweep, you just held still.
 # mapping a tiny box onto a whole screen would make the cursor unusably
 # twitchy, so refuse rather than save something that feels broken.
@@ -168,6 +177,7 @@ async def collect_range(
     duration: float = SWEEP_SECONDS,
     on_progress: Callable[[float, int], None] | None = None,
     on_sample: Callable[[float, float], None] | None = None,
+    stall_timeout: float = STALL_TIMEOUT_SECONDS,
 ) -> list[tuple[float, float, float]]:
     """
     watch the hand for `duration` seconds and return every palm position we
@@ -184,30 +194,53 @@ async def collect_range(
     without this module needing to know anything about how that's rendered.
     kept separate from on_progress since not every caller wants per-sample
     detail and n_samples alone doesn't say *where* the range is.
+
+    raises CalibrationError if no frame arrives for `stall_timeout` seconds
+    partway through: by this point wait_for_hand already proved a device was
+    there, so a stall here means it went away mid-sweep rather than "no hand
+    yet". if the stream just ends cleanly (leapd closed the connection),
+    that's not treated as an error, we return whatever was collected so far.
     """
     samples: list[tuple[float, float, float]] = []
     start = time.monotonic()
 
-    async for frame in stream_frames():
-        elapsed = time.monotonic() - start
-        if elapsed >= duration:
-            break
+    stream = stream_frames()
+    try:
+        while True:
+            elapsed = time.monotonic() - start
+            if elapsed >= duration:
+                break
 
-        hand = pick_hand(frame, preferred_hand)
-        if hand is not None:
-            pos = tuple(hand["palmPosition"])
-            samples.append(pos)
-            if on_sample is not None:
-                on_sample(pos[0], pos[1])
+            try:
+                frame = await asyncio.wait_for(stream.__anext__(), timeout=stall_timeout)
+            except TimeoutError:
+                raise CalibrationError(
+                    f"the leap stopped sending data partway through the sweep "
+                    f"(no frame for {stall_timeout:.0f}s). is it still plugged in?"
+                ) from None
+            except StopAsyncIteration:
+                break
 
-        if on_progress is not None:
-            on_progress(min(1.0, elapsed / duration), len(samples))
+            hand = pick_hand(frame, preferred_hand)
+            if hand is not None:
+                pos = tuple(hand["palmPosition"])
+                samples.append(pos)
+                if on_sample is not None:
+                    on_sample(pos[0], pos[1])
+
+            elapsed = time.monotonic() - start
+            if on_progress is not None:
+                on_progress(min(1.0, elapsed / duration), len(samples))
+    finally:
+        await stream.aclose()
 
     return samples
 
 
 async def collect_neutral_tilt(
-    preferred_hand: str, duration: float = NEUTRAL_TILT_SECONDS
+    preferred_hand: str,
+    duration: float = NEUTRAL_TILT_SECONDS,
+    stall_timeout: float = STALL_TIMEOUT_SECONDS,
 ) -> tuple[float, float]:
     """
     watch a held-still hand and average its palm normal, giving us where
@@ -217,22 +250,40 @@ async def collect_neutral_tilt(
     needed because nobody's hand rests at a true zero: a real right hand
     measured x=-0.165 holding comfortably flat, which is enough to make an
     uncentred tilt mode creep sideways on its own.
+
+    same stall guard as collect_range: a device that disappears mid-read
+    raises CalibrationError instead of hanging, a clean end of stream just
+    means we work with whatever readings we already have.
     """
     xs: list[float] = []
     zs: list[float] = []
     start = time.monotonic()
 
-    async for frame in stream_frames():
-        if time.monotonic() - start >= duration:
-            break
-        hand = pick_hand(frame, preferred_hand)
-        if hand is None:
-            continue
-        normal = hand.get("palmNormal")
-        if not normal:
-            continue
-        xs.append(normal[0])
-        zs.append(normal[2])
+    stream = stream_frames()
+    try:
+        while True:
+            if time.monotonic() - start >= duration:
+                break
+            try:
+                frame = await asyncio.wait_for(stream.__anext__(), timeout=stall_timeout)
+            except TimeoutError:
+                raise CalibrationError(
+                    f"the leap stopped sending data partway through the read "
+                    f"(no frame for {stall_timeout:.0f}s). is it still plugged in?"
+                ) from None
+            except StopAsyncIteration:
+                break
+
+            hand = pick_hand(frame, preferred_hand)
+            if hand is None:
+                continue
+            normal = hand.get("palmNormal")
+            if not normal:
+                continue
+            xs.append(normal[0])
+            zs.append(normal[2])
+    finally:
+        await stream.aclose()
 
     if len(xs) < 20:
         raise CalibrationError(

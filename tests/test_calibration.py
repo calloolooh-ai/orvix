@@ -5,6 +5,8 @@ pure and is the part that decides whether your cursor covers the screen, so
 it's worth pinning down.
 """
 
+import asyncio
+
 import pytest
 
 from orvix import calibration
@@ -13,6 +15,7 @@ from orvix.calibration import (
     CalibrationError,
     _percentile,
     build_box,
+    collect_neutral_tilt,
     collect_range,
     describe_box,
     wait_for_hand,
@@ -163,6 +166,57 @@ async def test_wait_for_hand_times_out_if_leapd_never_sends_a_single_frame(monke
 
     with pytest.raises(CalibrationError, match="never saw a"):
         await wait_for_hand("right", timeout=0.05)
+
+
+@pytest.mark.asyncio
+async def test_collect_range_times_out_if_leap_goes_silent_mid_sweep(monkeypatch):
+    # regression test: wait_for_hand already proved the device was there
+    # before the sweep started, but collect_range's own `async for` had no
+    # per-message timeout, so a device that disappears mid-sweep (unplugged,
+    # bad cable) hung it forever the same way the old wait_for_hand did. a
+    # generator that yields one real frame then goes silent for good stands
+    # in for that.
+    async def _stalls_after_one_frame(url=None):
+        yield {"hands": [{"type": "right", "palmPosition": [0.0, 100.0, 0.0]}]}
+        await asyncio.sleep(999)
+        yield {"hands": []}  # pragma: no cover - never reached
+
+    monkeypatch.setattr(calibration, "stream_frames", _stalls_after_one_frame)
+
+    with pytest.raises(CalibrationError, match="stopped sending data"):
+        await collect_range("right", duration=999.0, stall_timeout=0.05)
+
+
+@pytest.mark.asyncio
+async def test_collect_range_returns_samples_if_stream_ends_cleanly(monkeypatch):
+    # a stream that just ends (leapd closed the connection) is not the same
+    # failure as one that goes silent while still open: we still return
+    # whatever samples were collected rather than raising, matching the
+    # existing duration=999.0 tests above.
+    positions = [(0.0, 100.0, 0.0), (10.0, 110.0, 0.0)]
+    monkeypatch.setattr(calibration, "stream_frames", _fake_stream(positions))
+
+    samples = await collect_range("right", duration=999.0, stall_timeout=0.05)
+    assert len(samples) == 2
+
+
+@pytest.mark.asyncio
+async def test_collect_neutral_tilt_times_out_if_leap_goes_silent(monkeypatch):
+    # same stall guard, applied to the other collector that shares the
+    # unguarded `async for` pattern.
+    async def _stalls_after_one_frame(url=None):
+        yield {
+            "hands": [
+                {"type": "right", "palmPosition": [0.0, 100.0, 0.0], "palmNormal": [0.1, -1.0, 0.0]}
+            ]
+        }
+        await asyncio.sleep(999)
+        yield {"hands": []}  # pragma: no cover - never reached
+
+    monkeypatch.setattr(calibration, "stream_frames", _stalls_after_one_frame)
+
+    with pytest.raises(CalibrationError, match="stopped sending data"):
+        await collect_neutral_tilt("right", duration=999.0, stall_timeout=0.05)
 
 
 @pytest.mark.asyncio
