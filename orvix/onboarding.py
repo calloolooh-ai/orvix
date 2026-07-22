@@ -32,15 +32,31 @@ CALIBRATE_NOW_LABEL = "calibrate now"
 SKIP_FOR_NOW_LABEL = "skip for now"
 
 
-def is_first_run(config_path: Path) -> bool:
+def is_first_run(config_path: Path, profiles_dir: Path | None = None) -> bool:
     """
     true the first time orvix runs on this machine: no ~/.orvix/config.yaml
     yet, meaning calibration has never been saved (config.py falls back to
     guessed defaults when the file is missing, see load_config).
 
-    just a path check, not a "have you calibrated recently" heuristic: once
-    you've saved any config at all, even by skipping the wizard, this goes
-    false for good. re-onboarding an existing user who deliberately skipped
-    would be more annoying than helpful.
+    also checks profiles_dir if given: "Save current as..." writes a named
+    profile without ever touching config.yaml (see gui.py's
+    _save_profile_as), so a user who saves a profile on their very first
+    launch without switching to one would otherwise get nagged with the
+    welcome alert again on every later launch, config.yaml still missing
+    the whole time. any saved profile is just as much evidence of a prior
+    run as config.yaml is.
+
+    not a "have you calibrated recently" heuristic beyond that: once
+    you've saved any config or profile at all, even by skipping the
+    wizard, this goes false for good. re-onboarding an existing user who
+    deliberately skipped would be more annoying than helpful.
     """
-    return not config_path.exists()
+    if config_path.exists():
+        return False
+    if profiles_dir is not None:
+        try:
+            if any(profiles_dir.iterdir()):
+                return False
+        except FileNotFoundError:
+            pass
+    return True

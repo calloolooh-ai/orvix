@@ -32,6 +32,7 @@ from orvix import calibration
 from orvix.calibration_viz import BoundsTracker, coverage_rect, marker_fraction
 from orvix.config import (
     DEFAULT_CONFIG_PATH,
+    DEFAULT_PROFILES_DIR,
     Settings,
     delete_profile,
     list_profiles,
@@ -258,8 +259,9 @@ class OrvixApp(rumps.App):
         super().__init__("orvix", title=ICON_IDLE, quit_button=None)
 
         # captured before anything in this run could save a config, since
-        # is_first_run just checks whether the file exists yet at all
-        self._is_first_run = onboarding.is_first_run(DEFAULT_CONFIG_PATH)
+        # is_first_run just checks whether config.yaml or any profile
+        # exists yet at all
+        self._is_first_run = onboarding.is_first_run(DEFAULT_CONFIG_PATH, DEFAULT_PROFILES_DIR)
 
         self.settings = _load_startup_config()
         self.dry_run = rumps.MenuItem("Dry Run (don't move real cursor)", callback=self._toggle_dry_run)
