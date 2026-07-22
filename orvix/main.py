@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
+import math
 import time
 from collections.abc import Callable
 
@@ -44,7 +45,6 @@ from orvix.extra_gestures import (
     roll_from_normal,
     scaled_volume_percent,
 )
-import math
 
 logger = logging.getLogger("orvix.main")
 
@@ -70,8 +70,6 @@ _GESTURE_FAMILY: dict[GestureType, tuple[str, str]] = {
     GestureType.GRAB_SCROLL: ("grab", "continue"),
     GestureType.GRAB_END: ("grab", "end"),
 }
-
-
 
 
 def _dispatch(
