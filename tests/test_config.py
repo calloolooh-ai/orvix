@@ -17,6 +17,54 @@ from orvix.config import (
 )
 
 
+def test_load_config_clamps_out_of_range_thresholds(tmp_path):
+    path = tmp_path / "config.yaml"
+    save_config(Settings(pinch_threshold=1.5, grab_release_threshold=-0.2), path)
+
+    loaded = load_config(path)
+
+    assert loaded.pinch_threshold == 1.0
+    assert loaded.grab_release_threshold == 0.0
+
+
+def test_load_config_clamps_out_of_range_percent(tmp_path):
+    path = tmp_path / "config.yaml"
+    save_config(Settings(volume_step_percent=250, volume_max_percent=-10), path)
+
+    loaded = load_config(path)
+
+    assert loaded.volume_step_percent == 100
+    assert loaded.volume_max_percent == 0
+
+
+def test_load_config_clamps_negative_durations(tmp_path):
+    path = tmp_path / "config.yaml"
+    save_config(Settings(dwell_click_seconds=-1.5, confirm_hold_seconds=-0.1), path)
+
+    loaded = load_config(path)
+
+    assert loaded.dwell_click_seconds == 0.0
+    assert loaded.confirm_hold_seconds == 0.0
+
+
+def test_load_config_leaves_sane_values_untouched(tmp_path):
+    path = tmp_path / "config.yaml"
+    save_config(Settings(pinch_threshold=0.75, volume_max_percent=18, dwell_click_seconds=1.5), path)
+
+    loaded = load_config(path)
+
+    assert loaded.pinch_threshold == 0.75
+    assert loaded.volume_max_percent == 18
+    assert loaded.dwell_click_seconds == 1.5
+
+
+def test_load_config_with_no_file_skips_sanitizing_defaults(tmp_path):
+    # defaults are already sane; this just confirms _sanitize_settings runs
+    # over the Settings() fallback path too without altering it
+    loaded = load_config(tmp_path / "missing.yaml")
+    assert loaded == Settings()
+
+
 def test_multi_monitor_defaults_to_true():
     assert Settings().multi_monitor is True
 

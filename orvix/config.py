@@ -12,11 +12,14 @@ written out to a local yaml file that overrides the defaults.
 from __future__ import annotations
 
 import dataclasses
+import logging
 from pathlib import Path
 
 import yaml
 
 from orvix.shortcuts import DEFAULT_RADIAL_ACTIONS as _DEFAULT_RADIAL_ACTIONS
+
+logger = logging.getLogger(__name__)
 
 # where the user's personal config lives. gitignored on purpose, since it'll
 # have your specific hand-range calibration in it, not something to commit.
@@ -328,10 +331,60 @@ class Settings:
     cursor_ring_enabled: bool = False
 
 
+# fields a hand-edited config.yaml (or an old profile) could set to a
+# nonsensical value with nothing downstream to catch it -- a threshold
+# comparison or a percent clamp just quietly does the wrong thing instead of
+# raising. (field name) -> (lo, hi) to clamp into, inclusive.
+_UNIT_INTERVAL_FIELDS = (
+    "pinch_threshold",
+    "pinch_release_threshold",
+    "pinch_freeze_threshold",
+    "grab_threshold",
+    "grab_release_threshold",
+)
+_PERCENT_FIELDS = ("volume_step_percent", "volume_max_percent")
+_NONNEGATIVE_SECONDS_FIELDS = (
+    "radial_dwell_seconds",
+    "dwell_click_seconds",
+    "pause_hold_seconds",
+    "confirm_hold_seconds",
+    "drag_hold_seconds",
+)
+
+
+def _clamp_field(settings: Settings, field: str, lo: float, hi: float) -> None:
+    value = getattr(settings, field)
+    clamped = max(lo, min(hi, value))
+    if clamped != value:
+        logger.warning(
+            "config field %r was %r, outside [%s, %s] -- clamping to %r",
+            field, value, lo, hi, clamped,
+        )
+        setattr(settings, field, clamped)
+
+
+def _sanitize_settings(settings: Settings) -> Settings:
+    """
+    clamp fields that would otherwise silently misbehave instead of raising --
+    e.g. a threshold above 1.0 just never triggers, a negative dwell duration
+    fires instantly. only touches values that are actually out of range, so a
+    well-formed config round-trips unchanged.
+    """
+    for field in _UNIT_INTERVAL_FIELDS:
+        _clamp_field(settings, field, 0.0, 1.0)
+    for field in _PERCENT_FIELDS:
+        _clamp_field(settings, field, 0, 100)
+    for field in _NONNEGATIVE_SECONDS_FIELDS:
+        _clamp_field(settings, field, 0.0, float("inf"))
+    return settings
+
+
 def load_config(path: Path = DEFAULT_CONFIG_PATH) -> Settings:
     """
     load settings from yaml, falling back to defaults for anything missing
-    (or for everything, if the file doesn't exist yet).
+    (or for everything, if the file doesn't exist yet). values outside a
+    sane range (see _sanitize_settings) are clamped with a warning rather
+    than left to misbehave downstream.
     """
     if not path.exists():
         return Settings()
@@ -341,7 +394,7 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> Settings:
 
     calibration_raw = raw.pop("calibration", {})
     calibration = CalibrationBox(**calibration_raw)
-    return Settings(calibration=calibration, **raw)
+    return _sanitize_settings(Settings(calibration=calibration, **raw))
 
 
 def save_config(settings: Settings, path: Path = DEFAULT_CONFIG_PATH) -> None:
