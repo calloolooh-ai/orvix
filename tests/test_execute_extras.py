@@ -91,6 +91,23 @@ def test_dwell_click_fires_a_plain_click():
     assert mouse.calls == [("click",)]
 
 
+def test_dwell_click_reports_a_landed_click():
+    # run_live uses this return value to flash the cursor ring, same as
+    # _dispatch's return for pinch/grab/right-click -- dwell click needs it
+    # too since _DwellClicker.feed() zeroes its own progress the instant it
+    # fires, so there'd otherwise be no completion feedback at all.
+    mouse = FakeMouse()
+    landed = _execute_extras([ExtraAction.DWELL_CLICK], mouse, make_mapper(), Settings())
+    assert landed is True
+
+
+def test_non_click_actions_do_not_report_a_landed_click():
+    mouse = FakeMouse()
+    actions = [ExtraAction.ZOOM_IN, ExtraAction.VOLUME_UP, ExtraAction.CONFIRM]
+    landed = _execute_extras(actions, mouse, make_mapper(), Settings())
+    assert landed is False
+
+
 def test_confirm_defaults_to_the_literal_return_shortcut():
     mouse = FakeMouse()
     _execute_extras([ExtraAction.CONFIRM], mouse, make_mapper(), Settings())

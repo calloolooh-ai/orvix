@@ -317,12 +317,20 @@ def _execute_extras(
     mapper: Mapper,
     settings: Settings,
     extras: ExtraGestures | None = None,
-) -> None:
+) -> bool:
+    """
+    returns True if a dwell click actually landed this call, same "click just
+    happened" signal _dispatch returns for pinch/grab/right-click, so callers
+    can use it to flash the cursor ring. _DwellClicker.feed() already zeroes
+    its own progress the instant it fires, so without this the ring would
+    silently drop straight to hidden/baseline with no completion feedback.
+    """
     if extras is None:
         # callers that don't care about twist-rate scaling (e.g. most tests)
         # can omit this; a fresh instance has rate 0, which scaled_volume_percent
         # clamps to volume_step_percent, matching the old fixed-step behavior.
         extras = ExtraGestures()
+    landed = False
     for action in actions:
         if action == ExtraAction.ZOOM_IN:
             mouse.zoom(1)
@@ -348,6 +356,7 @@ def _execute_extras(
             mouse.set_volume_relative(-pct)
         elif action == ExtraAction.DWELL_CLICK:
             mouse.click()
+            landed = True
         elif action == ExtraAction.CONFIRM:
             # thumbs_up_action is a name into shortcuts.NAMED_SHORTCUTS, same
             # table the radial wedges use, so it's remappable to anything in
@@ -361,6 +370,7 @@ def _execute_extras(
             # doesn't jump when control resumes
             mapper.reset()
             logger.info("orvix %s", "paused" if action == ExtraAction.PAUSE_ON else "resumed")
+    return landed
 
 
 async def run_live(
@@ -487,7 +497,8 @@ async def run_live(
             # signals and can pause everything. do them before cursor dispatch
             # so the "stop" pose can gate this frame.
             signals = _compute_signals(frame, hand, events, settings)
-            _execute_extras(extras.observe(signals, now), mouse, mapper, settings, extras)
+            if _execute_extras(extras.observe(signals, now), mouse, mapper, settings, extras):
+                flash_until = now + _CLICK_FLASH_SECONDS
 
             # feed the cursor dwell-countdown ring: send progress while it
             # climbs, and one hide when it ends. with cursor_ring_enabled, a
