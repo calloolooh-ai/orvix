@@ -593,6 +593,15 @@ class OrvixApp(rumps.App):
         name = response.text.strip() if response.clicked else ""
         if not name:
             return
+        if name in list_profiles():
+            overwrite = rumps.alert(
+                "orvix",
+                f"a profile named {name!r} already exists -- overwrite it with the current settings?",
+                ok="Overwrite",
+                cancel="Cancel",
+            )
+            if overwrite != 1:
+                return
         try:
             save_profile(name, self.settings)
         except ValueError as exc:

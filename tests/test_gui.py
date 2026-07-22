@@ -231,6 +231,31 @@ def test_save_profile_as_rejects_an_invalid_name(isolated_app, monkeypatch):
     assert len(alerts) == 1
 
 
+def test_save_profile_as_over_an_existing_name_asks_first(isolated_app, monkeypatch):
+    isolated_app._test_profiles["work"] = Settings()
+    isolated_app._rebuild_profiles_menu()
+    monkeypatch.setattr(gui.rumps, "Window", lambda **kw: _FakeWindow("work"))
+    calls = []
+    monkeypatch.setattr(gui.rumps, "alert", lambda *a, **k: calls.append((a, k)) or 1)
+
+    isolated_app._save_profile_as(None)
+
+    assert len(calls) == 1
+    assert isolated_app._test_profiles["work"] is isolated_app.settings
+
+
+def test_save_profile_as_over_an_existing_name_can_be_cancelled(isolated_app, monkeypatch):
+    original = Settings(cursor_mode="tilt")
+    isolated_app._test_profiles["work"] = original
+    isolated_app._rebuild_profiles_menu()
+    monkeypatch.setattr(gui.rumps, "Window", lambda **kw: _FakeWindow("work"))
+    monkeypatch.setattr(gui.rumps, "alert", lambda *a, **k: 0)
+
+    isolated_app._save_profile_as(None)
+
+    assert isolated_app._test_profiles["work"] is original
+
+
 def test_load_profile_setter_replaces_settings_and_saves(isolated_app):
     other = Settings(cursor_mode="tilt", multi_monitor=False, cursor_ring_enabled=True)
     isolated_app._test_profiles["work"] = other
