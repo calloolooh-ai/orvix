@@ -417,11 +417,17 @@ async def run_live(
     _BOUNDS_RECHECK_SECONDS = 2.0
     last_bounds_check = time.monotonic()
 
+    # only meaningful for preferred_hand == "first": which hand id we were
+    # tracking last frame, so a bystander's hand sorting ahead of it in
+    # leapd's list can't silently hijack tracking (see pick_hand's docstring)
+    last_hand_id = None
+
     try:
         # latest-frame-wins: if a CGEventPost stall puts us behind, skip the
         # frames that piled up rather than replaying stale hand positions
         async for frame in stream_latest_frames():
-            hand = pick_hand(frame, settings.preferred_hand)
+            hand = pick_hand(frame, settings.preferred_hand, last_hand_id)
+            last_hand_id = hand.get("id") if hand is not None else None
             now = time.monotonic()
 
             if now - last_bounds_check >= _BOUNDS_RECHECK_SECONDS:

@@ -92,9 +92,11 @@ Architecture plans for the 8 candidate features from [`COMPETITIVE_RESEARCH.md`]
 
 ---
 
-## 5. Defensive single-hand-only enforcement
+## 5. Defensive single-hand-only enforcement — **DONE**
 
 **Goal:** make sure a bystander's hand entering the Leap's field can't hijack tracking from the user's hand.
+
+**Update:** the `"first"`-mode gap described below is fixed. `pick_hand()` now takes an optional `last_hand_id` and, in `"first"` mode, keeps tracking that id across frames if it's still present, only falling back to `hands[0]` once it's genuinely gone (leap_client.py). `main.py`'s frame loop tracks `last_hand_id` across iterations and passes it in. See `tests/test_leap_client.py`'s three new `pick_hand_first_*` cases.
 
 **Important finding:** **`pick_hand()` already does most of this.** `leap_client.pick_hand(frame, preferred_hand)` (leap_client.py:222-244) only ever returns a single hand from `frame["hands"]`, and when `preferred_hand` is `"left"` or `"right"` it explicitly refuses to fall back to a different hand if the preferred one isn't present (leap_client.py:227-231, "we still return None rather than silently falling back"). The real gap is narrower than the report framed it: it's specifically the `preferred_hand == "first"` path (leap_client.py:237-238), which returns `hands[0]` unconditionally — if the user's hand drops out of view for one frame while a second hand (bystander, or the user's own other hand) is present, "first" mode could silently swap tracked hands.
 

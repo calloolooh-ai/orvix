@@ -219,7 +219,9 @@ def extended_fingers_for_hand(frame: dict, hand: dict) -> set[int] | None:
     return extended if saw_flag else None
 
 
-def pick_hand(frame: dict, preferred_hand: str) -> dict | None:
+def pick_hand(
+    frame: dict, preferred_hand: str, last_hand_id: object | None = None
+) -> dict | None:
     """
     pull the hand we care about out of a frame dict, or None if it's not
     visible right now.
@@ -229,12 +231,24 @@ def pick_hand(frame: dict, preferred_hand: str) -> dict | None:
     hand isn't in view but some hand is, we still return None rather than
     silently falling back to whatever hand is available, since switching
     hands mid-gesture would be a confusing surprise for the cursor mapping.
+
+    "first" has no notion of left/right to anchor on, so a second hand
+    entering frame (a bystander, or the user's own other hand) could
+    otherwise silently steal tracking the instant it sorts ahead of the
+    real one in leapd's list. pass the id of the hand you picked last frame
+    as last_hand_id and, if that id is still present, we keep tracking it
+    instead of blindly taking hands[0]; only fall back to hands[0] once
+    that id is genuinely gone.
     """
     hands = frame.get("hands", [])
     if not hands:
         return None
 
     if preferred_hand == "first":
+        if last_hand_id is not None:
+            for hand in hands:
+                if hand.get("id") == last_hand_id:
+                    return hand
         return hands[0]
 
     for hand in hands:

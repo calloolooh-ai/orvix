@@ -53,6 +53,23 @@ def test_pick_hand_does_not_fall_back_to_other_hand():
     assert pick_hand(frame, "right") is None
 
 
+def test_pick_hand_first_keeps_tracking_last_id_even_if_not_first_in_list():
+    # a second hand (bystander, or the user's other hand) sorts ahead of
+    # the one we were already tracking -- must not silently swap to it
+    frame = {"hands": [_hand(2, "right"), _hand(1, "left")]}
+    assert pick_hand(frame, "first", last_hand_id=1) == _hand(1, "left")
+
+
+def test_pick_hand_first_falls_back_to_hands_0_once_last_id_is_gone():
+    frame = {"hands": [_hand(2, "right")]}
+    assert pick_hand(frame, "first", last_hand_id=1) == _hand(2, "right")
+
+
+def test_pick_hand_first_with_no_last_id_yet_takes_hands_0():
+    frame = {"hands": [_hand(1, "left"), _hand(2, "right")]}
+    assert pick_hand(frame, "first", last_hand_id=None) == _hand(1, "left")
+
+
 # fingertips_for_hand
 
 
