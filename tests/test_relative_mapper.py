@@ -163,3 +163,24 @@ def test_make_mapper_threads_screen_origin_through():
     assert isinstance(m, RelativeCoordMapper)
     (x, y) = drive(m, [(0.0, 200.0)])[0]
     assert (x, y) == (500 + 960, 540)
+
+
+# -- update_screen_bounds: a monitor gets plugged/unplugged mid-session --
+
+
+def test_update_screen_bounds_reclamps_cursor_immediately():
+    # cursor parked out at the right edge of a wide desktop
+    m = RelativeCoordMapper(3840, 1080, Settings(), start=(3840.0, 500.0))
+    # the external monitor holding that edge just got unplugged
+    m.update_screen_bounds(1920, 1080, (0.0, 0.0))
+    (x, y) = drive(m, [(0.0, 0.0)])[0]
+    assert x <= 1920
+    assert y <= 1080
+
+
+def test_update_screen_bounds_changes_future_clamp_bounds():
+    m = RelativeCoordMapper(1920, 1080, Settings())
+    m.update_screen_bounds(1920, 1080, (1920.0, 0.0))  # desktop shifted right
+    out = drive(m, [(i * 50.0, 0.0) for i in range(50)])
+    for x, _y in out:
+        assert x >= 1920

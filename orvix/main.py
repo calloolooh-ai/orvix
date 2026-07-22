@@ -20,7 +20,7 @@ import time
 from collections.abc import Callable
 
 from orvix import calibration
-from orvix.displays import get_desktop_bounds
+from orvix.displays import DesktopBounds, get_desktop_bounds
 from orvix.config import Settings, load_config
 from orvix.gesture_interpreter import GestureEvent, GestureInterpreter, GestureType
 from orvix.coord_mapper import Mapper, TiltCoordMapper, make_mapper
@@ -278,6 +278,28 @@ def _compute_signals(
     return sig
 
 
+def _bounds_changed(
+    current_width: float,
+    current_height: float,
+    current_origin: tuple[float, float],
+    fresh: DesktopBounds,
+) -> tuple[int, int, tuple[float, float]] | None:
+    """
+    compare the mapper's current screen bounds against a freshly-queried
+    DesktopBounds. returns the new (width, height, origin) to apply if
+    anything changed (a monitor got plugged/unplugged mid-session), or None
+    if it's still the same desktop -- pulled out of run_live's loop so the
+    comparison logic is testable without a live Quartz/leapd stack.
+    """
+    if (
+        fresh.width != current_width
+        or fresh.height != current_height
+        or (fresh.origin_x, fresh.origin_y) != current_origin
+    ):
+        return fresh.width, fresh.height, (fresh.origin_x, fresh.origin_y)
+    return None
+
+
 def _execute_extras(
     actions: list[ExtraAction],
     mouse: MouseController,
@@ -388,12 +410,32 @@ async def run_live(
     # the cursor happened to be.
     radial_anchor: tuple[float, float] | None = None
 
+    # get_desktop_bounds is a real Quartz call, cheap but not free -- poll it
+    # on a timer rather than every frame. this is what catches a monitor
+    # being plugged/unplugged mid-session; the menu's "Use all displays"
+    # toggle already forces a full pipeline restart and doesn't need this.
+    _BOUNDS_RECHECK_SECONDS = 2.0
+    last_bounds_check = time.monotonic()
+
     try:
         # latest-frame-wins: if a CGEventPost stall puts us behind, skip the
         # frames that piled up rather than replaying stale hand positions
         async for frame in stream_latest_frames():
             hand = pick_hand(frame, settings.preferred_hand)
             now = time.monotonic()
+
+            if now - last_bounds_check >= _BOUNDS_RECHECK_SECONDS:
+                last_bounds_check = now
+                fresh = get_desktop_bounds(settings.multi_monitor)
+                changed = _bounds_changed(screen_width, screen_height, screen_origin, fresh)
+                if changed is not None:
+                    logger.info(
+                        "desktop bounds changed: %dx%d at (%d, %d) -> %dx%d at (%d, %d)",
+                        screen_width, screen_height, screen_origin[0], screen_origin[1],
+                        changed[0], changed[1], changed[2][0], changed[2][1],
+                    )
+                    screen_width, screen_height, screen_origin = changed
+                    mapper.update_screen_bounds(screen_width, screen_height, screen_origin)
 
             # while the radial menu is up it owns the hand: point at a wedge
             # and pinch/dwell to pick. skip the normal cursor pipeline so we

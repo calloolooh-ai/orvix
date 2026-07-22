@@ -9,9 +9,10 @@ non-async, non-hardware-dependent surface.
 import math
 
 from orvix.config import Settings
+from orvix.displays import DesktopBounds
 from orvix.extra_gestures import ExtraGestures, HandSignals
 from orvix.gesture_interpreter import GestureEvent, GestureType
-from orvix.main import _build_extras, _compute_signals, _radial_state
+from orvix.main import _bounds_changed, _build_extras, _compute_signals, _radial_state
 from orvix.radial_menu import RadialMenu
 
 
@@ -179,3 +180,21 @@ def test_no_primary_hand_skips_fist_and_thumbs_signals():
     sig = _compute_signals(frame, primary=None, events=[], settings=settings)
     assert sig.fist_roll_rad is None
     assert sig.thumbs_up is False
+
+
+# -- _bounds_changed --
+
+
+def test_bounds_changed_is_none_when_desktop_is_unchanged():
+    fresh = DesktopBounds(0.0, 0.0, 1920.0, 1080.0)
+    assert _bounds_changed(1920.0, 1080.0, (0.0, 0.0), fresh) is None
+
+
+def test_bounds_changed_detects_a_resize_eg_monitor_unplugged():
+    fresh = DesktopBounds(0.0, 0.0, 1920.0, 1080.0)
+    assert _bounds_changed(3840.0, 1080.0, (0.0, 0.0), fresh) == (1920.0, 1080.0, (0.0, 0.0))
+
+
+def test_bounds_changed_detects_an_origin_shift():
+    fresh = DesktopBounds(-1920.0, 0.0, 3840.0, 1080.0)
+    assert _bounds_changed(1920.0, 1080.0, (0.0, 0.0), fresh) == (3840.0, 1080.0, (-1920.0, 0.0))

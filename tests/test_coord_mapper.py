@@ -90,3 +90,11 @@ def test_default_origin_is_zero_zero_backward_compatible():
     mapper = make_mapper()
     x, y = mapper.map_to_screen((0, 200, 0), timestamp=0.0)
     assert (x, y) == (500, 250)
+
+
+def test_update_screen_bounds_changes_the_scale_and_clamp():
+    mapper = make_mapper(screen_width=1000, screen_height=500)
+    mapper.update_screen_bounds(2000, 500, (0.0, 0.0))
+    # calibration box center now maps to the center of the new, wider screen
+    x, y = mapper.map_to_screen((0, 200, 0), timestamp=0.0)
+    assert (x, y) == (1000, 250)

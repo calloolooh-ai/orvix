@@ -48,6 +48,10 @@ class Mapper(Protocol):
 
     def reset(self) -> None: ...
 
+    def update_screen_bounds(
+        self, screen_width: int, screen_height: int, screen_origin: tuple[float, float]
+    ) -> None: ...
+
 
 def _map_range(value: float, in_min: float, in_max: float, out_min: float, out_max: float) -> float:
     """linearly map value from [in_min, in_max] into [out_min, out_max], clamped to the output range."""
@@ -127,6 +131,19 @@ class CoordMapper:
         the hand disappears, the next position stands on its own. exists so
         callers can treat both mappers the same.
         """
+
+    def update_screen_bounds(
+        self, screen_width: int, screen_height: int, screen_origin: tuple[float, float]
+    ) -> None:
+        """
+        the desktop changed shape (monitor plugged/unplugged) since this
+        mapper was built. just swap in the new clamp/scale bounds; there's
+        no cursor position or filter history here that depends on the old
+        bounds, unlike the relative/tilt mappers.
+        """
+        self._screen_width = screen_width
+        self._screen_height = screen_height
+        self._origin_x, self._origin_y = screen_origin
 
 
 class RelativeCoordMapper:
@@ -234,6 +251,23 @@ class RelativeCoordMapper:
         self._prev = None
         self._t_prev = None
 
+    def update_screen_bounds(
+        self, screen_width: int, screen_height: int, screen_origin: tuple[float, float]
+    ) -> None:
+        """
+        desktop shape changed (monitor plugged/unplugged) since this mapper
+        was built. update the clamp bounds and re-clamp the current cursor
+        position into them immediately, in case the new desktop is smaller
+        than where the cursor currently sits (e.g. an external monitor that
+        held the cursor got unplugged) -- otherwise it'd stay stuck out in
+        now-nonexistent space until the next hand movement nudges it back in.
+        """
+        self._screen_width = screen_width
+        self._screen_height = screen_height
+        self._origin_x, self._origin_y = screen_origin
+        self._x = _clamp(self._x, self._origin_x, self._origin_x + self._screen_width)
+        self._y = _clamp(self._y, self._origin_y, self._origin_y + self._screen_height)
+
 
 class TiltCoordMapper:
     """
@@ -335,6 +369,20 @@ class TiltCoordMapper:
         # position to invalidate. just drop dt so the first frame back
         # doesn't integrate the whole gap.
         self._t_prev = None
+
+    def update_screen_bounds(
+        self, screen_width: int, screen_height: int, screen_origin: tuple[float, float]
+    ) -> None:
+        """
+        same reasoning as RelativeCoordMapper.update_screen_bounds: swap in
+        the new bounds and re-clamp the current position immediately so it
+        can't be left parked outside a shrunk desktop.
+        """
+        self._screen_width = screen_width
+        self._screen_height = screen_height
+        self._origin_x, self._origin_y = screen_origin
+        self._x = _clamp(self._x, self._origin_x, self._origin_x + self._screen_width)
+        self._y = _clamp(self._y, self._origin_y, self._origin_y + self._screen_height)
 
 
 def make_mapper(

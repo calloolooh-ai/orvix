@@ -118,6 +118,17 @@ def test_tilt_cursor_stays_within_offset_bounds():
     assert 0 <= y <= 1080
 
 
+def test_tilt_update_screen_bounds_reclamps_cursor_immediately():
+    # drive the cursor out to the right edge of a wide desktop
+    m = TiltCoordMapper(3840, 1080, Settings())
+    tilt_for(m, (1.0, 0.0, 0.0), frames=3000)
+    # the monitor holding that edge just got unplugged
+    m.update_screen_bounds(1920, 1080, (0.0, 0.0))
+    x, y = tilt_for(m, (0.0, 0.0, 0.0), frames=1)
+    assert x <= 1920
+    assert y <= 1080
+
+
 # -- dead zone --
 
 
