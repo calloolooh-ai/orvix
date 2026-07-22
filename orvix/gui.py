@@ -280,6 +280,14 @@ class OrvixApp(rumps.App):
         )
         self.multi_monitor_toggle.state = self.settings.multi_monitor
 
+        # faint always-on ring around the tracked cursor, not just during a
+        # dwell-click countdown -- read live in the frame loop like the
+        # radial menu toggle, so no pipeline restart needed.
+        self.cursor_ring_toggle = rumps.MenuItem(
+            "Show cursor ring", callback=self._toggle_cursor_ring
+        )
+        self.cursor_ring_toggle.state = self.settings.cursor_ring_enabled
+
         # gesture 12: circle to open the radial menu; pick a wedge by pinch or dwell
         self.radial_toggle = rumps.MenuItem(
             "Radial menu (circle to open)", callback=self._toggle_radial
@@ -322,6 +330,7 @@ class OrvixApp(rumps.App):
             self.grab_menu,
             self.fist_menu,
             self.multi_monitor_toggle,
+            self.cursor_ring_toggle,
             None,
             self.radial_toggle,
             self.dwell_menu,
@@ -450,6 +459,12 @@ class OrvixApp(rumps.App):
 
         return _set
 
+    def _toggle_cursor_ring(self, sender: rumps.MenuItem) -> None:
+        sender.state = not sender.state
+        self.settings.cursor_ring_enabled = bool(sender.state)
+        save_config(self.settings)
+        # read live in the frame loop, so no pipeline restart needed
+
     def _toggle_radial(self, sender: rumps.MenuItem) -> None:
         sender.state = not sender.state
         self.settings.radial_menu_enabled = bool(sender.state)
@@ -518,6 +533,7 @@ class OrvixApp(rumps.App):
         for item in self.thumbs_menu.values():
             item.state = active_thumbs == item.title
         self.multi_monitor_toggle.state = self.settings.multi_monitor
+        self.cursor_ring_toggle.state = self.settings.cursor_ring_enabled
         self.radial_toggle.state = self.settings.radial_menu_enabled
         for item in self.extras_menu.values():
             attr = _EXTRA_GESTURE_ATTR_BY_LABEL.get(item.title)

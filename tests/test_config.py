@@ -37,6 +37,25 @@ def test_missing_multi_monitor_key_falls_back_to_default(tmp_path):
     assert loaded.cursor_mode == "tilt"
 
 
+def test_cursor_ring_enabled_defaults_to_false():
+    assert Settings().cursor_ring_enabled is False
+
+
+def test_save_then_load_round_trips_cursor_ring_enabled(tmp_path):
+    path = tmp_path / "config.yaml"
+    save_config(Settings(cursor_ring_enabled=True), path)
+    loaded = load_config(path)
+    assert loaded.cursor_ring_enabled is True
+
+
+def test_missing_cursor_ring_enabled_key_falls_back_to_default(tmp_path):
+    # simulates an existing config.yaml written before this field existed
+    path = tmp_path / "config.yaml"
+    path.write_text("cursor_mode: tilt\n")
+    loaded = load_config(path)
+    assert loaded.cursor_ring_enabled is False
+
+
 def test_load_config_with_no_file_returns_defaults(tmp_path):
     path = tmp_path / "does_not_exist.yaml"
     loaded = load_config(path)

@@ -47,6 +47,12 @@ import math
 
 logger = logging.getLogger("orvix.main")
 
+# progress value fed to the dwell ring when cursor_ring_enabled wants a
+# faint always-there highlight but no real dwell countdown is running.
+# small enough that the countdown arc is imperceptible, just enough that
+# render(progress) treats it as "show" rather than "hide".
+_CURSOR_RING_BASELINE = 0.02
+
 # which (family, phase) each gesture event belongs to, used to look up the
 # configurable action (settings.pinch_action / settings.grab_action) for it.
 # POINT_MOVE and HAND_LOST aren't here, they're handled before this lookup.
@@ -400,11 +406,18 @@ async def run_live(
             _execute_extras(extras.observe(signals, now), mouse, mapper, settings)
 
             # feed the cursor dwell-countdown ring: send progress while it
-            # climbs, and one hide when it ends
+            # climbs, and one hide when it ends. with cursor_ring_enabled, a
+            # tiny baseline progress keeps the ring visible (as a faint
+            # always-there highlight) whenever a hand is tracked, so the real
+            # dwell countdown grows out of that baseline instead of popping
+            # the ring in from nothing.
             if on_dwell is not None:
                 progress = extras.dwell_progress
                 if progress > 0.01:
                     on_dwell(progress)
+                    dwell_shown = True
+                elif settings.cursor_ring_enabled and hand is not None:
+                    on_dwell(_CURSOR_RING_BASELINE)
                     dwell_shown = True
                 elif dwell_shown:
                     on_dwell(None)

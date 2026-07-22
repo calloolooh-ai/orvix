@@ -309,6 +309,15 @@ class Settings:
     # macOS still reports as active).
     multi_monitor: bool = True
 
+    # off by default: a small ring around the live cursor at all times, not
+    # just during a dwell-click countdown. reuses the same overlay window as
+    # dwell click (see DwellRingController in overlay.py), it just always
+    # renders a faint baseline ring instead of only appearing at progress > 0,
+    # so the countdown animation grows out of the baseline instead of the ring
+    # popping in from nothing. mainly useful for demos/screen recordings and
+    # for people still learning where the tracked cursor position actually is.
+    cursor_ring_enabled: bool = False
+
 
 def load_config(path: Path = DEFAULT_CONFIG_PATH) -> Settings:
     """

@@ -166,6 +166,21 @@ def test_multi_monitor_toggle_flips_the_setting(isolated_app):
     assert bool(sender.state) is False
 
 
+def test_cursor_ring_toggle_reflects_settings_default_off(isolated_app):
+    assert bool(isolated_app.cursor_ring_toggle.state) is False
+
+
+def test_cursor_ring_toggle_flips_the_setting(isolated_app):
+    sender = isolated_app.cursor_ring_toggle
+    assert isolated_app.settings.cursor_ring_enabled is False
+
+    isolated_app._toggle_cursor_ring(sender)
+
+    assert isolated_app.settings.cursor_ring_enabled is True
+    assert bool(sender.state) is True
+    assert len(isolated_app._test_saved) == 1
+
+
 def test_dry_run_toggle_flips_independently_of_settings(isolated_app):
     # dry-run is deliberately not part of Settings/config.yaml, it's a
     # per-session menu checkbox, see _toggle_dry_run
@@ -217,13 +232,14 @@ def test_save_profile_as_rejects_an_invalid_name(isolated_app, monkeypatch):
 
 
 def test_load_profile_setter_replaces_settings_and_saves(isolated_app):
-    other = Settings(cursor_mode="tilt", multi_monitor=False)
+    other = Settings(cursor_mode="tilt", multi_monitor=False, cursor_ring_enabled=True)
     isolated_app._test_profiles["work"] = other
 
     isolated_app._make_profile_load_setter("work")(None)
 
     assert isolated_app.settings is other
     assert bool(isolated_app.multi_monitor_toggle.state) is False
+    assert bool(isolated_app.cursor_ring_toggle.state) is True
     checked_mode = [i.title for i in isolated_app.mode_menu.values() if i.state]
     assert checked_mode == [gui.CURSOR_MODE_LABELS["tilt"]]
     assert len(isolated_app._test_saved) == 1
