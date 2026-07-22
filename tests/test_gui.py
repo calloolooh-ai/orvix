@@ -390,6 +390,26 @@ def test_calibrate_starts_when_not_already_calibrating(isolated_app, monkeypatch
     assert isolated_app._calibrating is True
 
 
+def test_run_calibration_shows_waiting_for_hand_before_the_blocking_call(isolated_app, monkeypatch):
+    # wait_for_hand blocks for up to 30s with no progress callbacks at all,
+    # so without an upfront status update the menu bar looks frozen right
+    # after you click OK -- this checks that feedback actually gets set
+    # before calibration.calibrate() is called, not just eventually.
+    seen_status_before_calibrate = []
+
+    def _record_and_raise(*a, **k):
+        seen_status_before_calibrate.append(isolated_app.status_item.title)
+        raise gui.calibration.CalibrationError("never saw a hand")
+
+    monkeypatch.setattr(gui.calibration, "calibrate", _record_and_raise)
+    monkeypatch.setattr(gui, "_main_thread_invoker", _SyncMainThreadInvoker())
+    monkeypatch.setattr(gui.rumps, "alert", lambda *a, **k: None)
+
+    isolated_app._run_calibration()
+
+    assert seen_status_before_calibrate == ["status: waiting for your hand..."]
+
+
 def test_run_calibration_clears_the_flag_even_when_calibration_errors(isolated_app, monkeypatch):
     def _broken(*a, **k):
         raise gui.calibration.CalibrationError("sweep too short")

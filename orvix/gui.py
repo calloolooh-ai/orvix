@@ -748,6 +748,14 @@ class OrvixApp(rumps.App):
         self._cal_fraction = 0.0
         self._cal_n_samples = 0
 
+        # wait_for_hand blocks for up to 30s with no on_progress/on_sample
+        # callbacks at all, so without this the menu bar shows nothing
+        # changing right after you click OK -- the calibration prompt says
+        # "watch the menu bar for progress" but there'd be none to watch
+        # until a hand is actually seen. this gives the same "something is
+        # happening" feedback the sweep phase gets from _update_calibration_ui.
+        self._on_main_thread(self._show_waiting_for_hand)
+
         try:
             try:
                 box = asyncio.run(
@@ -806,6 +814,10 @@ class OrvixApp(rumps.App):
             return
         self._last_cal_hud_update = now
         self._on_main_thread(self._update_calibration_hud)
+
+    def _show_waiting_for_hand(self) -> None:
+        self.status_item.title = "status: waiting for your hand..."
+        self.title = ICON_CALIBRATING
 
     def _update_calibration_ui(self, fraction: float, n_samples: int) -> None:
         filled = int(fraction * 10)
