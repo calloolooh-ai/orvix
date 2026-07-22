@@ -58,6 +58,8 @@ RADIAL_SHORTCUTS: dict[str, Shortcut] = {
     # thumbs_up_action without changing the default wheel's layout for
     # existing users.
     "spotlight": Shortcut(KEY_SPACE, ("cmd",)),
+    # same opt-in deal as spotlight. cmd+alt+esc opens the force quit dialog.
+    "force_quit": Shortcut(KEY_ESCAPE, ("cmd", "alt")),
 }
 
 # the default clockwise-from-top wedge layout, matching the overlay mock.
@@ -97,5 +99,6 @@ NAMED_SHORTCUT_LABELS: dict[str, str] = {
     "paste": "Paste",
     "screenshot": "Screenshot",
     "spotlight": "Spotlight Search",
+    "force_quit": "Force Quit",
     "confirm": "Return",
 }

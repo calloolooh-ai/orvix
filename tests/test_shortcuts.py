@@ -59,3 +59,11 @@ def test_spotlight_is_opt_in_not_a_default_wedge():
     # available for radial_actions/thumbs_up_action, but doesn't change the
     # default wheel layout for existing users
     assert "spotlight" not in DEFAULT_RADIAL_ACTIONS
+
+
+def test_force_quit_is_cmd_alt_esc():
+    assert RADIAL_SHORTCUTS["force_quit"] == Shortcut(53, ("cmd", "alt"))
+
+
+def test_force_quit_is_opt_in_not_a_default_wedge():
+    assert "force_quit" not in DEFAULT_RADIAL_ACTIONS
