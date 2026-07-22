@@ -23,7 +23,7 @@ on top of the core set, these can each be toggled in the menu bar (under More ge
 - **make a fist and twist your wrist** like a knob to change volume -- twist faster for a bigger jump per twist, slower for fine control, between `volume_step_percent` and `volume_max_percent` in config
 - **hold the cursor still** for a beat to left-click, no pinch needed (dwell click)
 - **hold both palms out** like a stop sign to pause orvix, do it again to resume
-- **hold a thumbs-up** to fire a shortcut, Return by default -- remappable in the menu bar ("Thumbs-up does...") or `thumbs_up_action` in config, to anything the radial wedges can do (Mission Control, Maximize, App Switcher, Undo, Copy, Paste, Screenshot)
+- **hold a thumbs-up** to fire a shortcut, Return by default -- remappable in the menu bar ("Thumbs-up does...") or `thumbs_up_action` in config, to anything the radial wedges can do (Mission Control, Maximize, App Switcher, Undo, Copy, Paste, Screenshot) plus a few opt-in extras not on the default wheel: Spotlight Search, Force Quit, and Lock Screen. Same opt-in extras can also be added to the wheel itself via `radial_actions` in config.
 
 the cursor freezes the moment you start closing your fingers, so the click lands where you aimed instead of sliding off as your palm shifts. that drift is the classic hand-tracking-cursor problem and most projects never fix it.
 
