@@ -62,6 +62,29 @@ def test_load_config_falls_back_on_wrong_type_threshold(tmp_path):
     assert loaded.pinch_threshold == Settings().pinch_threshold
 
 
+def test_load_config_drops_unrecognized_top_level_key(tmp_path):
+    # a typo'd field name (pinch_threshhold vs pinch_threshold) or a stray
+    # key from a different orvix version used to crash Settings(**raw)
+    # before _sanitize_settings ever got a chance to run -- unlike a wrong
+    # *value*, which the clamp/sanitize tests above already cover.
+    path = tmp_path / "config.yaml"
+    path.write_text(yaml.safe_dump({"pinch_threshhold": 0.9, "cursor_mode": "relative"}))
+
+    loaded = load_config(path)
+
+    assert loaded.cursor_mode == "relative"
+    assert loaded.pinch_threshold == Settings().pinch_threshold
+
+
+def test_load_config_drops_unrecognized_calibration_key(tmp_path):
+    path = tmp_path / "config.yaml"
+    path.write_text(yaml.safe_dump({"calibration": {"x_min": 1.0, "bogus_field": 2.0}}))
+
+    loaded = load_config(path)
+
+    assert loaded.calibration.x_min == 1.0
+
+
 def test_load_config_falls_back_on_wrong_type_percent(tmp_path):
     path = tmp_path / "config.yaml"
     path.write_text(yaml.safe_dump({"volume_max_percent": [1, 2, 3]}))

@@ -464,12 +464,33 @@ def _sanitize_settings(settings: Settings) -> Settings:
     return settings
 
 
+def _drop_unknown_keys(raw: dict, cls: type, path: Path) -> dict:
+    """
+    an unrecognized key (typo'd field name, or a field from a newer/older
+    orvix version) crashes cls(**raw) with a TypeError before
+    _sanitize_settings ever gets a chance to clamp anything -- the same
+    "silent bad state" risk cycles 11/17/18/21 fixed for bad *values*, just
+    one step earlier, for bad *keys*. drop what doesn't match and warn,
+    rather than taking the whole config (and everything that loads it) down.
+    """
+    known = {f.name for f in dataclasses.fields(cls)}
+    unknown = sorted(set(raw) - known)
+    if unknown:
+        logger.warning(
+            "%s has unrecognized %s field(s) %s, ignoring them",
+            path, cls.__name__, unknown,
+        )
+        raw = {k: v for k, v in raw.items() if k in known}
+    return raw
+
+
 def load_config(path: Path = DEFAULT_CONFIG_PATH) -> Settings:
     """
     load settings from yaml, falling back to defaults for anything missing
     (or for everything, if the file doesn't exist yet). values outside a
     sane range (see _sanitize_settings) are clamped with a warning rather
-    than left to misbehave downstream.
+    than left to misbehave downstream. unrecognized keys are dropped with a
+    warning for the same reason.
     """
     if not path.exists():
         return Settings()
@@ -477,8 +498,9 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> Settings:
     with path.open("r") as f:
         raw = yaml.safe_load(f) or {}
 
-    calibration_raw = raw.pop("calibration", {})
+    calibration_raw = _drop_unknown_keys(raw.pop("calibration", {}) or {}, CalibrationBox, path)
     calibration = CalibrationBox(**calibration_raw)
+    raw = _drop_unknown_keys(raw, Settings, path)
     return _sanitize_settings(Settings(calibration=calibration, **raw))
 
 
