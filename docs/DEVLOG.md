@@ -95,4 +95,13 @@ fixed all three, then went and checked pause/resume and hand drop for the same c
 - traced the new shortcuts (spotlight, force quit, lock screen) through the radial menu fire path on purpose, confirmed they get treated exactly like the original 7 wedges, no special casing that could've been missed
 - did a full 60 cycle retrospective: all 6 planned features done, 3 bug families fully closed out, codebase is in a solid, well tested state at this point. still finding the occasional small thing but the big stuff is done
 
-~60 cycles total, 50ish commits. full history in git log if you want the exact diffs.
+## deep maintenance mode (cycles 61-73ish)
+
+genuinely scraping the bottom now, most cycles come back with nothing:
+
+- marked feature plan items 1-4 as done, they'd shipped ages ago but never got the done marker
+- found orvix's version string existed in code but was never shown to the user anywhere, added it to the menu bar dropdown
+- re-ran pyflakes, ran a real coverage.py pass, checked dead code across every function/config field/constant, checked requirements.txt versions against what's installed, checked for deprecation warnings, checked executable bits on scripts, byte-compiled every module, all clean
+- devlog kept going stale between updates since these small checks aren't happening every single cycle anymore, catching it up again here
+
+~73 cycles total, 53ish commits. full history in git log if you want the exact diffs.
