@@ -549,8 +549,6 @@ def _demo() -> None:
         print("AppKit not available, can't preview the overlay")
         return
 
-    import math as _math
-
     app = AppKit.NSApplication.sharedApplication()
     app.setActivationPolicy_(AppKit.NSApplicationActivationPolicyAccessory)
 
