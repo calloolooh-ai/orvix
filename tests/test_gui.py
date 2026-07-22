@@ -58,6 +58,35 @@ def test_fist_choice_blank_for_a_custom_max_extended():
     assert _fist_choice_for(settings) == ""
 
 
+# -- startup config loading --
+
+
+def test_load_startup_config_returns_settings_unchanged_when_valid(monkeypatch):
+    good = Settings(cursor_mode="tilt")
+    monkeypatch.setattr(gui, "load_config", lambda: good)
+
+    assert gui._load_startup_config() is good
+
+
+def test_load_startup_config_falls_back_to_defaults_on_a_broken_file(monkeypatch):
+    # a stray/typo'd key or invalid yaml in ~/.orvix/config.yaml used to crash
+    # the app before it could even show a menu bar icon, with nothing visible
+    # to explain why (no terminal attached when launched from Finder). it
+    # should degrade to defaults and say so instead.
+    def _broken():
+        raise TypeError("__init__() got an unexpected keyword argument 'bogus_key'")
+
+    monkeypatch.setattr(gui, "load_config", _broken)
+    alerts = []
+    monkeypatch.setattr(gui.rumps, "alert", lambda *a, **k: alerts.append(a))
+
+    settings = gui._load_startup_config()
+
+    assert settings == Settings()
+    assert len(alerts) == 1
+    assert "bogus_key" in alerts[0][1]
+
+
 # -- OrvixApp construction + setters --
 
 
@@ -277,6 +306,25 @@ def test_load_profile_setter_handles_a_since_deleted_profile(isolated_app, monke
 
     # nothing blew up, and settings weren't touched
     assert isolated_app.settings.cursor_mode == "relative"
+
+
+def test_load_profile_setter_handles_a_corrupt_profile(isolated_app, monkeypatch):
+    # a hand-edited or half-written profile yaml can fail with all sorts of
+    # things (TypeError on an unexpected key, yaml.YAMLError on bad syntax) --
+    # none of that should crash the app or clobber the current settings.
+    def _broken(name):
+        raise TypeError("__init__() got an unexpected keyword argument 'bogus_key'")
+
+    monkeypatch.setattr(gui, "load_profile", _broken)
+    alerts = []
+    monkeypatch.setattr(gui.rumps, "alert", lambda *a, **k: alerts.append(a))
+    before = isolated_app.settings
+
+    isolated_app._make_profile_load_setter("busted")(None)
+
+    assert isolated_app.settings is before
+    assert len(alerts) == 1
+    assert "busted" in alerts[0][1]
 
 
 def test_delete_profile_setter_removes_it_when_confirmed(isolated_app, monkeypatch):

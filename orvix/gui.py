@@ -233,6 +233,26 @@ class PipelineWorker:
             loop.close()
 
 
+def _load_startup_config() -> Settings:
+    """
+    load_config()'s Settings(**raw) crashes on invalid yaml or a stray/typo'd
+    key, and with no terminal attached (launched from Finder/LaunchAgent)
+    that crash is invisible -- the menu bar icon just never shows up, no
+    error, nothing. fall back to defaults and say so instead, so a broken
+    ~/.orvix/config.yaml degrades to "orvix runs on defaults" rather than
+    "orvix silently refuses to start".
+    """
+    try:
+        return load_config()
+    except Exception as exc:  # noqa: BLE001 - a bad config file must not crash orvix before it can show an icon
+        logger.warning("failed to load %s, falling back to defaults: %s", DEFAULT_CONFIG_PATH, exc)
+        rumps.alert(
+            "orvix",
+            f"{DEFAULT_CONFIG_PATH} looks broken ({exc}) -- starting with default settings instead.",
+        )
+        return Settings()
+
+
 class OrvixApp(rumps.App):
     def __init__(self):
         super().__init__("orvix", title=ICON_IDLE, quit_button=None)
@@ -241,7 +261,7 @@ class OrvixApp(rumps.App):
         # is_first_run just checks whether the file exists yet at all
         self._is_first_run = onboarding.is_first_run(DEFAULT_CONFIG_PATH)
 
-        self.settings = load_config()
+        self.settings = _load_startup_config()
         self.dry_run = rumps.MenuItem("Dry Run (don't move real cursor)", callback=self._toggle_dry_run)
         self.dry_run.state = False
 
@@ -575,11 +595,19 @@ class OrvixApp(rumps.App):
     def _make_profile_load_setter(self, name: str):
         def _load(sender: rumps.MenuItem) -> None:
             try:
-                self.settings = load_profile(name)
+                new_settings = load_profile(name)
             except FileNotFoundError:
                 rumps.alert("orvix", f"profile {name!r} is gone -- refreshing the list.")
                 self._rebuild_profiles_menu()
                 return
+            except Exception as exc:  # noqa: BLE001 - a corrupt profile file must not crash orvix
+                logger.warning("failed to load profile %r, keeping current settings: %s", name, exc)
+                rumps.alert(
+                    "orvix",
+                    f"profile {name!r} looks broken ({exc}) -- keeping current settings.",
+                )
+                return
+            self.settings = new_settings
             self._apply_loaded_settings()
 
         return _load
