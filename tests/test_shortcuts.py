@@ -9,6 +9,7 @@ import pytest
 
 from orvix.shortcuts import (
     CONFIRM_SHORTCUT,
+    DEFAULT_RADIAL_ACTIONS,
     NAMED_SHORTCUT_LABELS,
     NAMED_SHORTCUTS,
     RADIAL_SHORTCUTS,
@@ -48,3 +49,13 @@ def test_labels_are_nonempty_human_text():
     for label in NAMED_SHORTCUT_LABELS.values():
         assert isinstance(label, str)
         assert label.strip() != ""
+
+
+def test_spotlight_is_cmd_space():
+    assert RADIAL_SHORTCUTS["spotlight"] == Shortcut(49, ("cmd",))
+
+
+def test_spotlight_is_opt_in_not_a_default_wedge():
+    # available for radial_actions/thumbs_up_action, but doesn't change the
+    # default wheel layout for existing users
+    assert "spotlight" not in DEFAULT_RADIAL_ACTIONS

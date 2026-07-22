@@ -25,6 +25,7 @@ KEY_V = 9
 KEY_Z = 6
 KEY_3 = 20
 KEY_UP = 126
+KEY_SPACE = 49
 
 MODIFIERS = ("cmd", "shift", "ctrl", "alt")
 
@@ -53,6 +54,10 @@ RADIAL_SHORTCUTS: dict[str, Shortcut] = {
     # which drops you into area-selection mode and waits for a drag -- no
     # good for a one-shot gesture-fired shortcut.
     "screenshot": Shortcut(KEY_3, ("cmd", "shift")),
+    # not in DEFAULT_RADIAL_ACTIONS -- available as an opt-in wedge or
+    # thumbs_up_action without changing the default wheel's layout for
+    # existing users.
+    "spotlight": Shortcut(KEY_SPACE, ("cmd",)),
 }
 
 # the default clockwise-from-top wedge layout, matching the overlay mock.
@@ -91,5 +96,6 @@ NAMED_SHORTCUT_LABELS: dict[str, str] = {
     "copy": "Copy",
     "paste": "Paste",
     "screenshot": "Screenshot",
+    "spotlight": "Spotlight Search",
     "confirm": "Return",
 }
