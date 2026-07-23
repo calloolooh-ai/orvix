@@ -182,6 +182,7 @@ class PipelineWorker:
         loop = asyncio.new_event_loop()
         self._loop = loop
         asyncio.set_event_loop(loop)
+        errored = False
         try:
             self._task = loop.create_task(
                 run_live(
@@ -198,10 +199,13 @@ class PipelineWorker:
         except (asyncio.CancelledError, CancelledError):
             pass
         except LeapConnectionError as exc:
+            errored = True
             self._on_error(str(exc))
         except SystemExit:
+            errored = True
             self._on_error("couldn't connect to leapd, see docs/SETUP.md")
         except Exception as exc:  # noqa: BLE001 - surface anything unexpected to the menu bar rather than dying silently
+            errored = True
             logger.exception("live pipeline crashed")
             self._on_error(str(exc))
         else:
@@ -212,12 +216,22 @@ class PipelineWorker:
             # stop always cancels the task instead and lands in the except
             # above, so reaching here means tracking was silently lost and
             # would otherwise look identical to the user pressing Stop.
+            errored = True
             self._on_error("lost connection to leapd mid-session, see docs/SETUP.md")
         finally:
             self._shutdown_loop(loop)
             self._loop = None
             self._task = None
-            self._on_status("stopped")
+            if not errored:
+                # _show_error already sets its own persistent icon/status
+                # text; calling _on_status("stopped") right after it would
+                # silently overwrite that back to a normal-looking idle
+                # state the instant the one-time alert dialog gets
+                # dismissed, losing the only lasting trace that anything
+                # went wrong. same "error looks identical to a normal stop"
+                # bug this file already fixed at the detection layer, just
+                # one step further down in the UI.
+                self._on_status("stopped")
 
     @staticmethod
     def _shutdown_loop(loop: asyncio.AbstractEventLoop) -> None:

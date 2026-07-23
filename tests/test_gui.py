@@ -231,6 +231,11 @@ def test_worker_reports_an_error_when_leapd_drops_the_connection_mid_session(mon
     # PipelineWorker's CancelledError branch. before this fix, a clean
     # mid-session drop fell through to the same "status: stopped" the menu
     # bar shows for a normal stop, with no indication tracking was lost.
+    #
+    # it also must NOT report "stopped" afterward: _show_error already sets
+    # its own persistent icon/status text on the real app, and a trailing
+    # "stopped" would silently overwrite that back to a normal-looking idle
+    # state the instant the one-time alert dialog gets dismissed.
     async def fake_run_live(**kwargs):
         return
 
@@ -247,7 +252,31 @@ def test_worker_reports_an_error_when_leapd_drops_the_connection_mid_session(mon
     worker._thread.join(timeout=2.0)
 
     assert errors == ["lost connection to leapd mid-session, see docs/SETUP.md"]
-    assert statuses[-1] == "stopped"
+    assert "stopped" not in statuses
+
+
+def test_worker_reports_no_trailing_stopped_status_when_the_pipeline_crashes(monkeypatch):
+    # same reasoning as the mid-session-drop test above, but for the
+    # generic "the pipeline blew up" except branch instead of the clean
+    # disconnect one -- both need to skip the trailing "stopped" so a real
+    # crash's error state isn't quietly overwritten right after it's shown.
+    async def fake_run_live(**kwargs):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(gui, "run_live", fake_run_live)
+
+    statuses = []
+    errors = []
+    worker = gui.PipelineWorker(
+        on_event=lambda e: None,
+        on_status=statuses.append,
+        on_error=errors.append,
+    )
+    worker.start(Settings(), dry_run=True)
+    worker._thread.join(timeout=2.0)
+
+    assert errors == ["boom"]
+    assert "stopped" not in statuses
 
 
 def test_worker_reports_nothing_extra_on_a_real_user_requested_stop(monkeypatch):
