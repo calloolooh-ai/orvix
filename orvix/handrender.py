@@ -214,7 +214,22 @@ def _run_reader(state: HandsState, stop: threading.Event) -> None:
     try:
         loop.run_until_complete(pump())
     finally:
-        loop.close()
+        # a real user-requested stop hits the `return` above while
+        # stream_latest_frames' background reader task and its leapd
+        # websocket are still alive underneath it -- closing the loop
+        # without letting them unwind first leaks the connection, same
+        # bug gui.py's own pipeline teardown already had to fix.
+        try:
+            pending = [t for t in asyncio.all_tasks(loop) if not t.done()]
+            for task in pending:
+                task.cancel()
+            if pending:
+                loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+            loop.run_until_complete(loop.shutdown_asyncgens())
+        except Exception:  # noqa: BLE001 - a messy teardown must not take the app down
+            logger.debug("hand renderer reader teardown was not clean", exc_info=True)
+        finally:
+            loop.close()
 
 
 if _APPKIT_OK:
