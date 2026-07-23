@@ -167,3 +167,11 @@ cycle 106 double-checked the calibration mutual-exclusion fixes from 104-105 had
 ## dead target_fps field (cycle 113)
 
 `Settings.target_fps` in config.py looked like a real knob for the pipeline's frame rate but nothing ever read `settings.target_fps` anywhere. perf.py has its own completely separate local `target_fps` parameter used only for benchmarking, unrelated to the Settings field. dropped the dead field and cleaned up two spots in FEATURE_PLANS.md that pointed at it as if it controlled the real frame budget. checked every other Settings field for the same kind of dead-config bug afterward (cycle 114), all of them are actually read somewhere, this was the only one.
+
+## two more real bugs found live-tracing run_live (cycles 115-116)
+
+`RadialMenu.open()` takes a `pinching` param specifically so a pinch already held on the opening frame can't get misread as an instant wedge pick, and it's already unit tested that way, but the actual call site in `run_live` never passed the real value, it always defaulted to False. if your hand was still lightly pinched right as the circle gesture finished, the very next `update()` read that as a brand new pinch edge and fired whatever wedge was under the dead zone before you ever saw the wheel. fixed to pass the real pinchStrength check, same threshold `_fire_radial` already uses every frame after that.
+
+separately, `dry_run` turned out to be the one checkbox that didn't restart the running pipeline on change, unlike cursor mode/multi-monitor/extra gestures/dwell. `dry_run` only gets read once, at `worker.start()`, so flipping the checkbox mid-session did nothing to the live worker: you could check "dry run" and still be moving your real cursor, or uncheck it and stay stuck in dry-run. added the same restart-on-change fix as the other start-only settings.
+
+checked every other gui.py checkbox/setter against this exact bug shape afterward (cycle 117): pinch/grab action, thumbs-up, cursor ring, radial toggle, extra gestures, dwell, fist strictness, cursor mode, multi-monitor all correctly either read live every frame (with a comment saying so) or already restart. dry-run was the only omission, and it's fixed now. this bug class looks closed.
