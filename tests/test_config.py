@@ -48,6 +48,21 @@ def test_load_config_clamps_negative_durations(tmp_path):
     assert loaded.confirm_hold_seconds == 0.0
 
 
+def test_load_config_clamps_zero_or_negative_step_fields(tmp_path):
+    # zoom_step_mm/volume_step_deg feed a `while resid >= step` loop in
+    # extra_gestures.py -- a step of 0 or negative never advances resid past
+    # itself, so that loop spins forever the instant a zoom/volume gesture
+    # fires. unlike the other numeric fields, 0 itself is the dangerous
+    # value here, not just negative, so this needs its own floor above zero.
+    path = tmp_path / "config.yaml"
+    save_config(Settings(zoom_step_mm=0.0, volume_step_deg=-5.0), path)
+
+    loaded = load_config(path)
+
+    assert loaded.zoom_step_mm == 0.1
+    assert loaded.volume_step_deg == 0.1
+
+
 def test_load_config_falls_back_on_wrong_type_threshold(tmp_path):
     # a hand-edited config.yaml can hold any YAML scalar, not just the right
     # type -- `pinch_threshold: "high"` parses fine as a string and used to

@@ -369,6 +369,13 @@ _NONNEGATIVE_SECONDS_FIELDS = (
     "confirm_hold_seconds",
     "drag_hold_seconds",
 )
+# zoom_step_mm/volume_step_deg feed a `while self._resid >= self._step: ...`
+# loop in extra_gestures.py's _ZoomDetector/_VolumeTwistDetector -- a step of
+# 0 (or negative) never advances resid past itself, so the loop spins forever
+# the instant a zoom/volume gesture fires, freezing the whole dispatch thread
+# with no recovery short of a force-quit. floor them well above zero instead
+# of just non-negative like the seconds fields above.
+_POSITIVE_STEP_FIELDS = ("zoom_step_mm", "volume_step_deg")
 
 
 def _field_default(field: str):
@@ -529,6 +536,8 @@ def _sanitize_settings(settings: Settings) -> Settings:
         _clamp_field(settings, field, 0, 100)
     for field in _NONNEGATIVE_SECONDS_FIELDS:
         _clamp_field(settings, field, 0.0, float("inf"))
+    for field in _POSITIVE_STEP_FIELDS:
+        _clamp_field(settings, field, 0.1, float("inf"))
     _sanitize_radial_actions(settings)
     _sanitize_gesture_action(settings, "pinch_action", "click")
     _sanitize_gesture_action(settings, "grab_action", "scroll")
