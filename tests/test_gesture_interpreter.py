@@ -109,6 +109,20 @@ def test_held_pinch_past_hold_window_becomes_drag():
     assert events[0].type == GestureType.PINCH_DRAG
 
 
+def test_releasing_an_active_drag_sends_pinch_up():
+    settings = Settings()
+    settings.drag_hold_seconds = 0.0  # go straight to dragging
+    interpreter = GestureInterpreter(settings)
+
+    interpreter.process_hand(make_hand(pinch=0.9))  # PINCH_DOWN
+    events = interpreter.process_hand(make_hand(pinch=0.9))
+    assert events[0].type == GestureType.PINCH_DRAG  # now actually DRAGGING
+
+    events = interpreter.process_hand(make_hand(pinch=0.1))
+    assert len(events) == 1
+    assert events[0].type == GestureType.PINCH_UP
+
+
 def test_pinch_hysteresis_ignores_strength_between_thresholds():
     settings = Settings()  # pinch_threshold=0.75, pinch_release_threshold=0.5
     interpreter = GestureInterpreter(settings)
