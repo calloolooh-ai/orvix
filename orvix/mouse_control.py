@@ -181,8 +181,14 @@ class QuartzMouseController:
             f"(output volume of (get volume settings) + ({delta_percent}))"
         )
         try:
-            subprocess.run(["osascript", "-e", script], check=False, capture_output=True)
-        except OSError:
+            subprocess.run(
+                ["osascript", "-e", script], check=False, capture_output=True, timeout=2.0
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            # this runs synchronously on the gesture dispatch loop, same as
+            # every other frame's mouse/cursor work -- an osascript hang (e.g.
+            # macOS blocking on an Automation permission prompt) would freeze
+            # the whole real-time pipeline, not just this one volume nudge.
             logger.debug("osascript volume change failed", exc_info=True)
 
 

@@ -5,6 +5,7 @@ mocked throughout, no real CGEventPost ever happens and no hardware/
 permissions are needed.
 """
 
+import subprocess
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -186,6 +187,19 @@ def test_set_volume_relative_swallows_oserror(quartz):
     controller = QuartzMouseController()
     with patch("orvix.mouse_control.subprocess.run", side_effect=OSError("no osascript")):
         controller.set_volume_relative(10)  # must not raise
+
+
+def test_set_volume_relative_has_a_timeout_and_survives_one(quartz):
+    controller = QuartzMouseController()
+    with patch("orvix.mouse_control.subprocess.run") as mock_run:
+        controller.set_volume_relative(5)
+        assert mock_run.call_args.kwargs["timeout"] == 2.0
+
+    with patch(
+        "orvix.mouse_control.subprocess.run",
+        side_effect=subprocess.TimeoutExpired(cmd="osascript", timeout=2.0),
+    ):
+        controller.set_volume_relative(5)  # must not raise, would hang the dispatch loop otherwise
 
 
 def test_dry_run_controller_logs_every_action(caplog):
