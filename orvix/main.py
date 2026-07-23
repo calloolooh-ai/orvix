@@ -588,7 +588,17 @@ async def run_live(
             # the menu dead centre on screen, not wherever the cursor happened
             # to be, so it's in the same predictable spot every time and never
             # opens half off-screen near an edge.
-            if settings.radial_menu_enabled and hand is not None and not zoom_active:
+            if zoom_active:
+                # a two-hand zoom moves both hands a lot to change the pinch
+                # span; if the circle buffer kept whatever partial sweep it
+                # had going into the zoom, resuming circle.feed() right after
+                # would splice that big positional jump in as the next point,
+                # which the winding calc reads as real rotation same as any
+                # other step. reset here so a zoom gesture can't leave a
+                # discontinuity lying around to help trigger a later circle
+                # that was never actually drawn.
+                circle.reset()
+            elif settings.radial_menu_enabled and hand is not None:
                 palm = hand["palmPosition"]
                 if circle.feed(palm[0], palm[2], now):
                     radial_anchor = mapper.map_to_screen(tuple(palm), now)
