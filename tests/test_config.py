@@ -85,6 +85,23 @@ def test_load_config_clamps_radial_dead_zone_px(tmp_path):
     assert loaded2.radial_dead_zone_px == 0.0
 
 
+def test_load_config_clamps_one_euro_filter_fields(tmp_path):
+    # one_euro_filter.py's _smoothing_factor computes r / (r + 1) where
+    # r = 2*pi*cutoff*t_e -- a negative enough one_euro_min_cutoff drives
+    # cutoff past -1/(2*pi*t_e), landing r at exactly -1 and hitting a
+    # ZeroDivisionError that crashes the whole gesture dispatch thread.
+    # floor min_cutoff above zero (not just non-negative, since cutoff=0
+    # freezes the cursor forever at rest) and beta at non-negative, which is
+    # enough to guarantee cutoff can never drop below the floored min_cutoff.
+    path = tmp_path / "config.yaml"
+    save_config(Settings(one_euro_min_cutoff=-20.0, one_euro_beta=-5.0), path)
+
+    loaded = load_config(path)
+
+    assert loaded.one_euro_min_cutoff == 0.01
+    assert loaded.one_euro_beta == 0.0
+
+
 def test_load_config_fixes_release_threshold_not_lower_than_trigger(tmp_path):
     # pinch_release_threshold/grab_release_threshold have to stay below their
     # trigger threshold for the hysteresis to do anything -- if a hand-edited

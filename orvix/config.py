@@ -376,6 +376,19 @@ _NONNEGATIVE_SECONDS_FIELDS = (
 # with no recovery short of a force-quit. floor them well above zero instead
 # of just non-negative like the seconds fields above.
 _POSITIVE_STEP_FIELDS = ("zoom_step_mm", "volume_step_deg")
+# one_euro_filter.py's _smoothing_factor computes r / (r + 1) where
+# r = 2*pi*cutoff*t_e, and cutoff = one_euro_min_cutoff + one_euro_beta *
+# abs(dx_hat). a negative enough min_cutoff drives cutoff past
+# -1/(2*pi*t_e), which lands r at exactly -1 and hits a ZeroDivisionError --
+# crashing the entire gesture dispatch thread on whatever frame the hand's
+# speed happens to cross that point. floored above zero (not just
+# non-negative) since a cutoff of exactly 0 makes the filter freeze the
+# cursor in place forever at rest, same silent-break-not-crash risk as
+# radial_dead_zone_px at 0 would have been. beta only needs a non-negative
+# floor: since abs(dx_hat) >= 0, keeping beta >= 0 guarantees
+# cutoff = min_cutoff + beta*abs(dx_hat) can never drop below the already-
+# floored min_cutoff, so the crash can't happen from beta's side either.
+_MIN_CUTOFF_BOUNDS = (0.01, float("inf"))
 # radial_dead_zone_px isn't in any tuple above and never got a clamp of its
 # own. RadialMenu's wheel window is _BOX = 460px (overlay.py) centered on the
 # pointer, so a dead zone that reaches anywhere near that radius (or a
@@ -652,6 +665,8 @@ def _sanitize_settings(settings: Settings) -> Settings:
     for field in _POSITIVE_STEP_FIELDS:
         _clamp_field(settings, field, 0.1, float("inf"))
     _clamp_field(settings, "radial_dead_zone_px", *_RADIAL_DEAD_ZONE_BOUNDS)
+    _clamp_field(settings, "one_euro_min_cutoff", *_MIN_CUTOFF_BOUNDS)
+    _clamp_field(settings, "one_euro_beta", 0.0, float("inf"))
     _sanitize_threshold_order(settings, "pinch_threshold", "pinch_release_threshold")
     _sanitize_threshold_order(settings, "grab_threshold", "grab_release_threshold")
     _sanitize_calibration_axis_order(settings, "x_min", "x_max")
