@@ -469,6 +469,32 @@ def _sanitize_threshold_order(settings: Settings, on_field: str, release_field: 
     setattr(settings, release_field, fixed)
 
 
+def _sanitize_calibration_axis_order(settings: Settings, min_field: str, max_field: str) -> None:
+    """
+    keep a calibration box axis's min below its max -- coord_mapper's
+    _map_range doesn't raise if they're swapped (only an equal min/max is
+    guarded, as a degenerate-box divide-by-zero), it just silently inverts
+    that axis: t = (value - in_min) / (in_max - in_min) comes out negative
+    and the direction of every subsequent frame's motion mirrors. a
+    hand-edited config.yaml with min/max transposed on one axis would look
+    like the cursor moving backwards on just that axis, with no error to
+    explain why. swap them back into order rather than picking an arbitrary
+    default, since both are presumably real measurements, just recorded in
+    the wrong fields.
+    """
+    lo = getattr(settings.calibration, min_field)
+    hi = getattr(settings.calibration, max_field)
+    if lo <= hi:
+        return
+    logger.warning(
+        "calibration field %r (%r) is greater than %r (%r), which would invert that axis -- "
+        "swapping them",
+        min_field, lo, max_field, hi,
+    )
+    setattr(settings.calibration, min_field, hi)
+    setattr(settings.calibration, max_field, lo)
+
+
 def _sanitize_gesture_action(settings: Settings, field: str, default: str) -> None:
     """
     fall back to `default` for a pinch_action/grab_action that isn't one of
@@ -567,6 +593,9 @@ def _sanitize_settings(settings: Settings) -> Settings:
         _clamp_field(settings, field, 0.1, float("inf"))
     _sanitize_threshold_order(settings, "pinch_threshold", "pinch_release_threshold")
     _sanitize_threshold_order(settings, "grab_threshold", "grab_release_threshold")
+    _sanitize_calibration_axis_order(settings, "x_min", "x_max")
+    _sanitize_calibration_axis_order(settings, "y_min", "y_max")
+    _sanitize_calibration_axis_order(settings, "z_min", "z_max")
     _sanitize_radial_actions(settings)
     _sanitize_gesture_action(settings, "pinch_action", "click")
     _sanitize_gesture_action(settings, "grab_action", "scroll")

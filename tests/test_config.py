@@ -8,6 +8,7 @@ import pytest
 import yaml
 
 from orvix.config import (
+    CalibrationBox,
     Settings,
     delete_profile,
     list_profiles,
@@ -85,6 +86,25 @@ def test_load_config_fixes_release_threshold_not_lower_than_trigger(tmp_path):
 
     assert loaded.pinch_release_threshold < loaded.pinch_threshold
     assert loaded.grab_release_threshold < loaded.grab_threshold
+
+
+def test_load_config_swaps_inverted_calibration_axis(tmp_path):
+    # coord_mapper's _map_range doesn't raise if a calibration axis's min/max
+    # are swapped, it just silently inverts that axis's cursor motion -- a
+    # hand-edited config.yaml with x_min/x_max transposed would look like the
+    # cursor moving backwards on just that one axis, with no error to explain
+    # why. swap them back into order instead of clamping to a default, since
+    # both are presumably real measurements just recorded in the wrong fields.
+    path = tmp_path / "config.yaml"
+    save_config(
+        Settings(calibration=CalibrationBox(x_min=150.0, x_max=-150.0)),
+        path,
+    )
+
+    loaded = load_config(path)
+
+    assert loaded.calibration.x_min == -150.0
+    assert loaded.calibration.x_max == 150.0
 
 
 def test_load_config_falls_back_on_wrong_type_threshold(tmp_path):
