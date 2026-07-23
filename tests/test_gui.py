@@ -254,8 +254,9 @@ class _FakeMenuItem:
         lambda app: app._make_extra_toggle("zoom_enabled")(_FakeMenuItem()),
         lambda app: app._make_dwell_setter("0.6s")(None),
         lambda app: app._apply_loaded_settings(),
+        lambda app: app._toggle_dry_run(app.dry_run),
     ],
-    ids=["cursor_mode", "multi_monitor", "extra_toggle", "dwell", "profile_load"],
+    ids=["cursor_mode", "multi_monitor", "extra_toggle", "dwell", "profile_load", "dry_run"],
 )
 def test_every_pipeline_restart_path_shows_restarting_status_first(isolated_app, trigger):
     # stop(wait=True) blocks up to 2s with the menu otherwise unchanged,

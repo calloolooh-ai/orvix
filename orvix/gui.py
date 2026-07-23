@@ -442,6 +442,12 @@ class OrvixApp(rumps.App):
     def _toggle_dry_run(self, sender: rumps.MenuItem) -> None:
         sender.state = not sender.state
         self.dry_run.state = sender.state
+        # same reason as cursor mode/multi-monitor: dry_run is only read when
+        # the pipeline starts (worker.start(..., dry_run=...)), so flipping
+        # this while already running would otherwise leave the checkbox
+        # claiming one thing (e.g. "dry run is on") while the live worker
+        # keeps doing the other (still moving your real cursor).
+        self._restart_pipeline_if_running()
 
     def _make_mode_setter(self, mode: str):
         def _set(sender: rumps.MenuItem) -> None:
