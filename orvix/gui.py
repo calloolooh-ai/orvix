@@ -688,6 +688,23 @@ class OrvixApp(rumps.App):
         threading.Thread(target=self._run_calibration, daemon=True).start()
 
     def _quit(self, sender: rumps.MenuItem) -> None:
+        # calibration runs on its own daemon thread and holds its own leapd
+        # stream open (see calibration.wait_for_hand/collect_range) -- same
+        # leak class as the pipeline worker's, but there's no clean way to
+        # cancel an in-flight sweep, so warn instead of silently letting the
+        # process exit kill the thread mid-collection and drop the config
+        # save you were about to get at the end of it.
+        if self._calibrating:
+            confirmed = rumps.alert(
+                "orvix",
+                "calibration is still running -- quitting now abandons it "
+                "(and the bounds you've swept so far won't get saved). quit anyway?",
+                ok="Quit anyway",
+                cancel="Cancel",
+            )
+            if confirmed != 1:
+                return
+
         # wait=True so the leapd websocket actually gets closed (see
         # PipelineWorker._shutdown_loop) before the process exits and the
         # daemon thread running it gets killed mid cleanup -- same leak this

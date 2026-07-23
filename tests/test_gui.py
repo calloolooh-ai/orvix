@@ -289,6 +289,37 @@ def test_quit_waits_for_the_pipeline_to_stop_before_quitting_the_app(isolated_ap
     assert len(quit_calls) == 1
 
 
+def test_quit_warns_and_can_be_cancelled_while_calibration_is_running(isolated_app, monkeypatch):
+    # calibration holds its own leapd stream open on a daemon thread with no
+    # clean cancellation path, so quitting mid-sweep should ask first instead
+    # of silently abandoning it, same spirit as the worker-stop leak fix above.
+    isolated_app._calibrating = True
+    fake_worker = _FakeRunningWorker()
+    isolated_app.worker = fake_worker
+    quit_calls = []
+    monkeypatch.setattr(gui.rumps, "quit_application", lambda *a, **k: quit_calls.append(a))
+    monkeypatch.setattr(gui.rumps, "alert", lambda *a, **k: 0)  # cancel
+
+    isolated_app._quit(None)
+
+    assert fake_worker.stop_calls == []
+    assert quit_calls == []
+
+
+def test_quit_proceeds_past_the_calibration_warning_if_confirmed(isolated_app, monkeypatch):
+    isolated_app._calibrating = True
+    fake_worker = _FakeRunningWorker()
+    isolated_app.worker = fake_worker
+    quit_calls = []
+    monkeypatch.setattr(gui.rumps, "quit_application", lambda *a, **k: quit_calls.append(a))
+    monkeypatch.setattr(gui.rumps, "alert", lambda *a, **k: 1)  # "Quit anyway"
+
+    isolated_app._quit(None)
+
+    assert fake_worker.stop_calls == [True]
+    assert len(quit_calls) == 1
+
+
 def test_cursor_ring_toggle_reflects_settings_default_off(isolated_app):
     assert bool(isolated_app.cursor_ring_toggle.state) is False
 
