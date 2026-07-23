@@ -99,6 +99,20 @@ def _dispatch(
         return False
 
     if event.palm_position is None:
+        # positionless cleanup events -- GestureInterpreter.reset() emits
+        # PINCH_UP/GRAB_END with no palm_position when it force-closes a
+        # gesture that was mid-hold (e.g. the radial menu closing on a hand
+        # that was still pinching). every other event type needs a real
+        # screen position to do anything, but the "end" phase just needs to
+        # release whatever mouse_down/GRAB_START already pressed, or the
+        # button stays physically stuck down since nothing else ever fires
+        # the matching release.
+        if event.type in (GestureType.PINCH_UP, GestureType.GRAB_END):
+            family, phase = _GESTURE_FAMILY[event.type]
+            action = settings.pinch_action if family == "pinch" else settings.grab_action
+            if action == "click":
+                mouse.mouse_up()
+                return True
         return False
 
     # tilt mode steers off the angle of your hand, not where it is, so it

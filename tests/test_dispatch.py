@@ -101,15 +101,53 @@ def test_grab_remapped_to_click_uses_start_and_end_as_down_and_up():
     assert kinds == ["mouse_down", "drag_to", "mouse_up"]
 
 
-def test_hand_lost_and_missing_position_are_ignored():
+def test_hand_lost_is_ignored():
     settings = Settings()
     mouse = FakeMouse()
     mapper = make_mapper()
 
     _dispatch(GestureEvent(GestureType.HAND_LOST), mapper, mouse, settings)
-    _dispatch(GestureEvent(GestureType.PINCH_UP, palm_position=None), mapper, mouse, settings)
 
     assert mouse.calls == []
+
+
+def test_positionless_pinch_up_still_releases_a_held_click():
+    # GestureInterpreter.reset() emits PINCH_UP/GRAB_END with no
+    # palm_position when it force-closes a gesture that was mid-hold (e.g.
+    # the radial menu closing on a hand that was still pinching). those
+    # events still have to release whatever mouse_down/GRAB_START already
+    # pressed, or the button stays stuck down since nothing else fires the
+    # matching release.
+    settings = Settings()
+    mouse = FakeMouse()
+    mapper = make_mapper()
+
+    result = _dispatch(GestureEvent(GestureType.PINCH_UP, palm_position=None), mapper, mouse, settings)
+
+    assert mouse.calls == [("mouse_up",)]
+    assert result is True
+
+
+def test_positionless_grab_end_still_releases_a_held_click():
+    settings = Settings(grab_action="click")
+    mouse = FakeMouse()
+    mapper = make_mapper()
+
+    result = _dispatch(GestureEvent(GestureType.GRAB_END, palm_position=None), mapper, mouse, settings)
+
+    assert mouse.calls == [("mouse_up",)]
+    assert result is True
+
+
+def test_positionless_pinch_up_is_a_noop_when_action_is_not_click():
+    settings = Settings(pinch_action="scroll")
+    mouse = FakeMouse()
+    mapper = make_mapper()
+
+    result = _dispatch(GestureEvent(GestureType.PINCH_UP, palm_position=None), mapper, mouse, settings)
+
+    assert mouse.calls == []
+    assert result is False
 
 
 def test_dispatch_reports_true_only_when_a_click_actually_lands():
