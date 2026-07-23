@@ -131,3 +131,11 @@ a coverage.py pass found `DRAGGING -> IDLE`'s pinch-release branch had zero test
 ## more nothing-found cycles (84-86)
 
 reviewed bin/orvix, scripts/build_app.sh, shortcuts.py, overlay.py, displays.py, one_euro_filter.py, README.md's cli section, re-read FEATURE_PLANS.md end to end (all 8 items done or explicitly deferred), checked exception handling in gui.py's PipelineWorker, checked overlay callbacks for main-thread dispatch, scanned for tautological test assertions, re-ran pyflakes, and reviewed the config sanitization chain added over cycles 75-77 for consistency. all clean. genuinely getting hard to find anything new at this point.
+
+## quit not waiting for pipeline shutdown (cycle 90)
+
+every pipeline-restart path in gui.py already called `worker.stop(wait=True)` on purpose, specifically so the background thread finishes closing the leapd websocket before a new pipeline starts. `_quit` called `worker.stop()` with no wait, so on actual app quit the cleanup could get killed mid-flight by process exit instead of closing the connection cleanly. matched it to the restart paths, added a test, `_quit` had zero coverage before this.
+
+## positionless pinch/grab release events were getting dropped (cycle 93)
+
+third stuck-mouse-button bug in this family. `GestureInterpreter.reset()` emits `PINCH_UP`/`GRAB_END` with `palm_position=None` when it force-closes a gesture that was mid-hold, like the radial menu closing on a hand that was still pinching. `main._dispatch()` bailed out on any event with `palm_position=None` before it ever reached the release logic, so the mouse button stayed physically stuck down even though the interpreter's own internal state correctly reset to idle. the original radial-menu-close fix only closed the interpreter's internal state leak, not this one. now positionless `PINCH_UP`/`GRAB_END` still fire their release action when the mapped action is `"click"`, since releasing a button doesn't need a screen position. checked afterward for any other event type that could carry `palm_position=None` the same way, only these two ever do and both are covered now.
