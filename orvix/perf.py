@@ -16,10 +16,12 @@ one_euro_min_cutoff/one_euro_beta trade these two off against each other,
 that's the whole point of the filter (see one_euro_filter.py's docstring).
 
 also benchmarks the per-frame CPU cost of gesture_interpreter + coord_mapper
-back to back (benchmark_dispatch_throughput), since target_fps=100 gives the
-real pipeline a 10ms/frame budget and it's worth knowing how much of that
-the pure interpret+map cost actually uses, so a future heavier gesture
-doesn't quietly eat into headroom nobody's watching.
+back to back (benchmark_dispatch_throughput). the real pipeline has no fps
+cap of its own, it just processes frames as fast as leapd delivers them, but
+100fps is a reasonable stand-in for how often a real device streams frames,
+which puts a rough 10ms/frame budget on this benchmark. worth knowing how
+much of that the pure interpret+map cost actually uses, so a future heavier
+gesture doesn't quietly eat into headroom nobody's watching.
 
 pure/synthetic throughout: no leapd, no real hand, no Quartz. drives
 OneEuroFilter/GestureInterpreter/CoordMapper directly with generated input,
