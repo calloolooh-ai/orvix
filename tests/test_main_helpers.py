@@ -251,3 +251,51 @@ async def test_run_live_falls_back_to_defaults_on_a_broken_config(monkeypatch):
 
     # should run to completion on defaults rather than raising ValueError
     await run_live(dry_run=True, verbose=False)
+
+
+# -- main()'s CLI-side handling of a clean mid-session leapd drop --
+
+
+def test_main_warns_on_a_clean_mid_session_leapd_drop(monkeypatch, caplog):
+    """
+    mirrors gui.py's PipelineWorker._run_thread fix: run_live only returns
+    normally when leapd closes the stream cleanly mid-session (see its own
+    docstring), and the CLI has no Stop button, so there's no other
+    legitimate reason for asyncio.run(run_live(...)) to complete without
+    raising. before this, that silently exited clean, indistinguishable from
+    nothing having gone wrong at all.
+    """
+    import sys
+
+    from orvix import main as main_module
+
+    async def _return_immediately(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(main_module, "run_live", _return_immediately)
+    monkeypatch.setattr(sys, "argv", ["orvix-cli"])
+
+    with caplog.at_level("WARNING", logger="orvix.main"):
+        main_module.main()
+
+    assert "lost connection to leapd mid-session" in caplog.text
+
+
+def test_main_stays_quiet_on_a_real_leap_connection_error(monkeypatch):
+    """
+    the existing SystemExit conversion path shouldn't also trigger the new
+    mid-session warning -- a real connection error at startup is a distinct,
+    already-reported failure, not a silent drop.
+    """
+    import sys
+
+    from orvix import main as main_module
+
+    async def _boom(*args, **kwargs):
+        raise LeapConnectionError("leapd is not running")
+
+    monkeypatch.setattr(main_module, "run_live", _boom)
+    monkeypatch.setattr(sys, "argv", ["orvix-cli"])
+
+    with pytest.raises(SystemExit):
+        main_module.main()

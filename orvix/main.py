@@ -658,6 +658,15 @@ def main() -> None:
         asyncio.run(run_live(dry_run=args.dry_run, verbose=args.verbose))
     except LeapConnectionError as exc:
         raise SystemExit(1) from exc
+    else:
+        # run_live only returns normally when its stream_latest_frames loop
+        # ends on its own -- the one documented case is leapd closing the
+        # websocket cleanly mid-session (see leap_client.py's stream_frames
+        # docstring). the CLI has no Stop button, so unlike gui.py's
+        # PipelineWorker there's no other legitimate reason to land here:
+        # reaching this point always means tracking was silently lost, same
+        # shape the GUI just got fixed for (see PipelineWorker._run_thread).
+        logger.warning("lost connection to leapd mid-session, see docs/SETUP.md")
 
 
 if __name__ == "__main__":
