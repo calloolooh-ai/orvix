@@ -123,6 +123,33 @@ def test_load_config_fixes_tilt_full_not_above_deadzone(tmp_path):
     assert loaded.tilt_full > loaded.tilt_deadzone
 
 
+def test_load_config_fixes_freeze_threshold_not_lower_than_pinch(tmp_path):
+    # _freezing_for_click only holds the cursor still while pinch_state is
+    # still IDLE and pinch_strength has crossed pinch_freeze_threshold. if
+    # freeze_threshold is at or above pinch_threshold, the real pinch always
+    # fires first and moves pinch_state out of IDLE before pinch_strength
+    # ever reaches freeze_threshold, so the anti-drift freeze silently never
+    # engages again.
+    path = tmp_path / "config.yaml"
+    save_config(Settings(pinch_threshold=0.75, pinch_freeze_threshold=0.9), path)
+
+    loaded = load_config(path)
+
+    assert loaded.pinch_freeze_threshold < loaded.pinch_threshold
+
+
+def test_load_config_leaves_freeze_threshold_opt_out_alone(tmp_path):
+    # a freeze_threshold of 0 (or below) is a deliberate opt-out already
+    # handled by _freezing_for_click itself -- it must not get pulled up
+    # into the valid range by the same fix that guards the ordering case.
+    path = tmp_path / "config.yaml"
+    save_config(Settings(pinch_threshold=0.75, pinch_freeze_threshold=0.0), path)
+
+    loaded = load_config(path)
+
+    assert loaded.pinch_freeze_threshold == 0.0
+
+
 def test_load_config_falls_back_on_wrong_type_threshold(tmp_path):
     # a hand-edited config.yaml can hold any YAML scalar, not just the right
     # type -- `pinch_threshold: "high"` parses fine as a string and used to

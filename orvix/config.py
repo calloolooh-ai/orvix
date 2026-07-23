@@ -519,6 +519,32 @@ def _sanitize_tilt_deadzone_order(settings: Settings) -> None:
     settings.tilt_full = fixed
 
 
+def _sanitize_pinch_freeze_threshold(settings: Settings) -> None:
+    """
+    keep pinch_freeze_threshold below pinch_threshold -- gesture_interpreter's
+    _freezing_for_click only holds the cursor still while pinch_state is
+    still IDLE and pinch_strength has crossed freeze_threshold. if
+    freeze_threshold is at or above pinch_threshold, the real pinch always
+    fires first (moving pinch_state out of IDLE) before pinch_strength ever
+    reaches freeze_threshold, so the IDLE check can never be true again --
+    the anti-drift freeze silently never engages, with no error to explain
+    why clicks keep sliding off target. a freeze_threshold of 0 (or below) is
+    a deliberate opt-out already handled by _freezing_for_click itself, so
+    that sentinel is left alone here.
+    """
+    if settings.pinch_freeze_threshold <= 0:
+        return
+    if settings.pinch_freeze_threshold < settings.pinch_threshold:
+        return
+    fixed = max(0.0, settings.pinch_threshold - 0.05)
+    logger.warning(
+        "config field 'pinch_freeze_threshold' (%r) is not lower than 'pinch_threshold' (%r), "
+        "which stops the freeze from ever engaging -- lowering it to %r",
+        settings.pinch_freeze_threshold, settings.pinch_threshold, fixed,
+    )
+    settings.pinch_freeze_threshold = fixed
+
+
 def _sanitize_gesture_action(settings: Settings, field: str, default: str) -> None:
     """
     fall back to `default` for a pinch_action/grab_action that isn't one of
@@ -621,6 +647,7 @@ def _sanitize_settings(settings: Settings) -> Settings:
     _sanitize_calibration_axis_order(settings, "y_min", "y_max")
     _sanitize_calibration_axis_order(settings, "z_min", "z_max")
     _sanitize_tilt_deadzone_order(settings)
+    _sanitize_pinch_freeze_threshold(settings)
     _sanitize_radial_actions(settings)
     _sanitize_gesture_action(settings, "pinch_action", "click")
     _sanitize_gesture_action(settings, "grab_action", "scroll")
