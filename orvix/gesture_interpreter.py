@@ -174,6 +174,16 @@ class GestureInterpreter:
             return events
 
         if grab_strength >= self._settings.grab_threshold and self._is_fist(extended_fingers):
+            if self._pinch_state != _PinchState.IDLE:
+                # closing the rest of the way into a fist can carry pinchStrength
+                # over threshold too (thumb and index are both curled in), so a
+                # pinch can still be DOWN/DRAGGING the instant grab starts. if
+                # pinch_action is "click" that pinch already fired a real
+                # mouse_down; without releasing it here it stays stuck through
+                # the whole grab since nothing else ever emits its PINCH_UP.
+                events.append(GestureEvent(GestureType.PINCH_UP, palm_position))
+                self._pinch_state = _PinchState.IDLE
+                self._pinch_started_at = None
             self._grabbing = True
             events.append(GestureEvent(GestureType.GRAB_START, palm_position))
             return events

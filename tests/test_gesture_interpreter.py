@@ -135,6 +135,28 @@ def test_grab_emits_start_then_scroll_then_end():
     assert events[0].type == GestureType.GRAB_END
 
 
+def test_grab_starting_mid_pinch_releases_the_pinch_first():
+    # closing the rest of the way into a fist can carry pinchStrength over
+    # threshold too (thumb and index both curl in), so a pinch can still be
+    # DOWN the instant grabStrength also crosses threshold. if that pinch's
+    # PINCH_DOWN already fired a real mouse_down (pinch_action="click"), it
+    # must get released here or it stays stuck down through the whole grab.
+    settings = Settings()
+    interpreter = GestureInterpreter(settings)
+
+    events = interpreter.process_hand(make_hand(pinch=0.9, grab=0.0))
+    assert events[0].type == GestureType.PINCH_DOWN
+
+    events = interpreter.process_hand(make_hand(pinch=0.9, grab=0.9), extended_fingers=set())
+    types = [e.type for e in events]
+    assert types == [GestureType.PINCH_UP, GestureType.GRAB_START]
+
+    # and the interpreter is really back to idle, not just having emitted
+    # the event: a real release afterwards shouldn't re-fire PINCH_UP
+    events = interpreter.process_hand(make_hand(grab=0.1))
+    assert events[0].type == GestureType.GRAB_END
+
+
 def test_high_grab_strength_without_fist_does_not_start_grab():
     # fingers still out (index + middle extended) means it's a partial curl,
     # not a fist, so grab must not fire even though grabStrength is high
