@@ -399,7 +399,20 @@ async def run_live(
     and get a callback on every gesture event for status display, instead
     of only ever reading config from disk once and logging to stdout.
     """
-    settings = settings if settings is not None else load_config()
+    if settings is None:
+        # gui.py's _load_startup_config wraps this same call for exactly this
+        # reason: invalid yaml, or valid yaml that isn't a mapping at the top
+        # level (e.g. hand-edited into a list), makes load_config() crash
+        # before _sanitize_settings ever runs -- _clamp_field's own per-field
+        # type guard can't help here since it never gets the chance to run.
+        # the GUI already falls back to defaults for this; the CLI had
+        # nothing catching it at all and would just die with a traceback
+        # instead of running on defaults like a missing config.yaml does.
+        try:
+            settings = load_config()
+        except Exception as exc:  # noqa: BLE001 - a bad config file must not crash the CLI, same as gui.py
+            logger.warning("failed to load config, falling back to defaults: %s", exc)
+            settings = Settings()
     desktop = get_desktop_bounds(settings.multi_monitor)
     screen_width, screen_height = desktop.width, desktop.height
     screen_origin = (desktop.origin_x, desktop.origin_y)

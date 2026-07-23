@@ -226,3 +226,28 @@ async def test_run_live_lets_leap_connection_error_propagate_unconverted(monkeyp
 
     with pytest.raises(LeapConnectionError, match="not running"):
         await run_live(dry_run=True, verbose=False, settings=Settings())
+
+
+@pytest.mark.asyncio
+async def test_run_live_falls_back_to_defaults_on_a_broken_config(monkeypatch):
+    """
+    matches gui.py's _load_startup_config: a load_config() that raises
+    (invalid yaml, or valid yaml that isn't a mapping at the top level, e.g.
+    hand-edited into a list) must not crash the CLI before it even starts --
+    _clamp_field's own per-field type guard never gets a chance to run here
+    since the crash happens earlier, inside load_config itself. the GUI
+    already falls back to defaults for this; the CLI had nothing catching it.
+    """
+
+    def _boom():
+        raise ValueError("top-level yaml wasn't a mapping")
+
+    async def _empty_stream():
+        return
+        yield  # pragma: no cover - unreachable, just makes this an async generator
+
+    monkeypatch.setattr("orvix.main.load_config", _boom)
+    monkeypatch.setattr("orvix.main.stream_latest_frames", _empty_stream)
+
+    # should run to completion on defaults rather than raising ValueError
+    await run_live(dry_run=True, verbose=False)
