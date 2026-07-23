@@ -109,3 +109,9 @@ genuinely scraping the bottom now, most cycles come back with nothing:
 ## overlay wedge labels went stale (cycle 76)
 
 found overlay.py had its own hardcoded `_LABELS` dict for the radial wheel's wedge text, separate from shortcuts.py's `NAMED_SHORTCUT_LABELS`. it never got updated when spotlight/force_quit/lock_screen were added as opt-in shortcuts a while back, so if you put one of those in `radial_actions` (config.py validates it as a legit wedge name) the wheel would just show the raw id like "spotlight" instead of "Spotlight Search" while every other wedge got a real title. made `_LABELS` derive from `NAMED_SHORTCUT_LABELS` instead of duplicating it, plus a test asserting every valid radial action has a label so this can't silently drift again.
+
+## config sanitization went the rest of the way
+
+a run of a few cycles found `thumbs_up_action`, `preferred_hand`, and `cursor_mode` were the last config fields that could take a bogus value and silently misbehave (never fire, tracking never starts, mode quietly falls back) instead of warning like `pinch_action`/`grab_action`/`radial_actions` already did. all three now get sanitized the same way, with tests. checked the rest of config.py's fields against `_sanitize_settings` after and they're all already covered (numeric ranges clamped, enums validated) -- this vein's actually closed out now.
+
+also added the version number to `orvix status`'s output, it was already showing in the menu bar dropdown but the cli status check was the one place you'd actually go looking for it and it wasn't there.
