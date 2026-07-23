@@ -2,7 +2,7 @@
 config.py
 
 loads and saves orvix's settings: calibration box, pinch/grab thresholds,
-filter params, target fps, which hand to track.
+filter params, which hand to track.
 
 defaults live here so orvix runs (in a rough, uncalibrated way) even before
 you've run calibration.py. once you calibrate, the calibration box gets
@@ -326,8 +326,6 @@ class Settings:
     # against only 6 pinches, i.e. nearly every pinch ran long and turned into
     # a drag. 0.3 leaves enough room for a deliberate tap.
     drag_hold_seconds: float = 0.3
-
-    target_fps: int = 100
 
     # when true, the cursor can travel across every active display, not just
     # the main one: the mapper works over the bounding box of the whole

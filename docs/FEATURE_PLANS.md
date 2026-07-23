@@ -65,7 +65,7 @@ scroll already scales off `palm_velocity` (`main.py:149`), and volume-twist rate
 
 **GUI changes:** one checkbox menu item, e.g. under "More gestures" or a new "Display" section.
 
-**Risks / open questions:** running an always-on `NSView`/overlay window at 100fps target (`target_fps: int = 100`, config.py:278) has a real CPU/compositing cost that the dwell ring only pays transiently today — worth a quick pass through `orvix profile` (perf.py) or at least a manual CPU check before shipping as default-on. Also needs to coexist visually with the radial menu overlay (`OverlayController`, overlay.py:180) without both drawing at once.
+**Risks / open questions:** running an always-on `NSView`/overlay window at gesture-loop rates (100fps-class, see perf.py's `benchmark_dispatch_throughput`) has a real CPU/compositing cost that the dwell ring only pays transiently today — worth a quick pass through `orvix profile` (perf.py) or at least a manual CPU check before shipping as default-on. Also needs to coexist visually with the radial menu overlay (`OverlayController`, overlay.py:180) without both drawing at once.
 
 **Effort:** S (mechanism already exists; mostly wiring + a lower-cost render path).
 
@@ -151,7 +151,7 @@ scroll already scales off `palm_velocity` (`main.py:149`), and volume-twist rate
 **Files touched (sketch only):**
 - Would require a wholly new module, e.g. `orvix/target_snapping.py`, using macOS's `AXUIElement` Accessibility API (via `pyobjc`'s `ApplicationServices`/`Accessibility` bindings, not currently a dependency — check `requirements.txt`) to query clickable elements near the cursor from the frontmost app.
 - `orvix/coord_mapper.py` — any mapper's final `(x, y)` output would need a post-process "snap toward nearest target within N px" step before being handed to `mouse_control.move()`.
-- `orvix/main.py` — would need per-frame AX queries, which are synchronous, cross-process, and app-dependent in latency — a real risk to the 100fps `target_fps` budget (config.py:278) that `orvix profile` currently benchmarks.
+- `orvix/main.py` — would need per-frame AX queries, which are synchronous, cross-process, and app-dependent in latency — a real risk to the 100fps-class per-frame budget that `orvix profile` (perf.py's `benchmark_dispatch_throughput`) currently benchmarks.
 
 **Data flow / design:** `AXUIElementCopyElementAtPosition` (or similar) at roughly the cursor's screen position, per frame or throttled (e.g. every N frames to bound cost), then bias the mapper's output toward the nearest actionable element's bounds if within some `snap_radius_px`.
 
