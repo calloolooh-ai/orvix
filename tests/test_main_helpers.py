@@ -299,3 +299,27 @@ def test_main_stays_quiet_on_a_real_leap_connection_error(monkeypatch):
 
     with pytest.raises(SystemExit):
         main_module.main()
+
+
+def test_main_exits_cleanly_on_ctrl_c(monkeypatch, capsys):
+    """
+    same reasoning as calibration.run()'s own KeyboardInterrupt catch: ctrl-c
+    hitting main() while asyncio.run(run_live(...)) is still going shouldn't
+    surface as a raw traceback, it should stop cleanly like the rest of the
+    CLI already does.
+    """
+    import sys
+
+    from orvix import main as main_module
+
+    async def _interrupted(*args, **kwargs):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(main_module, "run_live", _interrupted)
+    monkeypatch.setattr(sys, "argv", ["orvix-cli"])
+
+    with pytest.raises(SystemExit) as exc_info:
+        main_module.main()
+
+    assert exc_info.value.code == 130
+    assert "stopped" in capsys.readouterr().out

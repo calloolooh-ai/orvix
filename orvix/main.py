@@ -658,6 +658,13 @@ def main() -> None:
         asyncio.run(run_live(dry_run=args.dry_run, verbose=args.verbose))
     except LeapConnectionError as exc:
         raise SystemExit(1) from exc
+    except KeyboardInterrupt:
+        # same reasoning as calibration.run()'s own KeyboardInterrupt catch:
+        # ctrl-c during run_live's async loop would otherwise surface as a
+        # raw traceback instead of the same clean stop-and-exit message the
+        # rest of the CLI already gives you.
+        print("\nstopped.")
+        raise SystemExit(130) from None
     else:
         # run_live only returns normally when its stream_latest_frames loop
         # ends on its own -- the one documented case is leapd closing the
