@@ -71,7 +71,7 @@ whichever terminal you launch from needs Accessibility + Input Monitoring, since
 
 ## building the app
 
-`orvix cli`/`orvix gui` run out of a terminal, which means the Accessibility/
+`orvix`/`orvix cli` run out of a terminal, which means the Accessibility/
 Input Monitoring grant goes to *that terminal app*, not to orvix -- switch
 terminals and you're granting it all over again (see docs/SETUP.md step 5).
 
@@ -85,7 +85,7 @@ open dist/orvix.app                     # or drag it to /Applications
 ```
 
 it's a menu-bar-only app (no Dock icon, no Cmd-Tab entry), same as running
-`orvix gui` from a terminal, and drives the exact same `run_live()` pipeline
+plain `orvix` from a terminal, and drives the exact same `run_live()` pipeline
 -- packaging changes nothing about behavior, only how permissions and
 launching work.
 
