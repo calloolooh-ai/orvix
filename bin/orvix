@@ -64,6 +64,8 @@ cmd="${1:-gui}"
 
 case "$cmd" in
     status)
+        echo -n "version:  "
+        "$PYTHON" -c "from orvix import __version__; print(__version__)"
         echo -n "leapd:    "
         if leapd_running; then echo "running"; else echo "NOT running"; fi
         echo -n "config:   "
