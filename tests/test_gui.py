@@ -424,6 +424,24 @@ def test_load_profile_setter_replaces_settings_and_saves(isolated_app):
     assert len(isolated_app._test_saved) == 1
 
 
+def test_load_profile_setter_refuses_while_calibration_is_running(isolated_app, monkeypatch):
+    # calibration finishes by writing to whatever self.settings currently
+    # points at, so swapping settings out from under it mid-sweep would
+    # silently land the calibration result on the wrong profile.
+    other = Settings(cursor_mode="tilt")
+    isolated_app._test_profiles["work"] = other
+    isolated_app._calibrating = True
+    before = isolated_app.settings
+    alerts = []
+    monkeypatch.setattr(gui.rumps, "alert", lambda *a, **k: alerts.append(a))
+
+    isolated_app._make_profile_load_setter("work")(None)
+
+    assert isolated_app.settings is before
+    assert len(alerts) == 1
+    assert len(isolated_app._test_saved) == 0
+
+
 def test_load_profile_setter_handles_a_since_deleted_profile(isolated_app, monkeypatch):
     monkeypatch.setattr(gui.rumps, "alert", lambda *a, **k: None)
 

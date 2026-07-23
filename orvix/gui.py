@@ -612,6 +612,17 @@ class OrvixApp(rumps.App):
 
     def _make_profile_load_setter(self, name: str):
         def _load(sender: rumps.MenuItem) -> None:
+            if self._calibrating:
+                # calibration finishes by writing to whatever self.settings
+                # currently points at (self.settings.calibration = box;
+                # save_config(self.settings), read live at completion time,
+                # not captured at thread start). swapping self.settings out
+                # from under it mid-sweep would silently land the calibration
+                # result on the newly loaded profile instead of the one that
+                # was actually being calibrated. same class of race
+                # _toggle_running/_calibrate already guard against.
+                rumps.alert("orvix", "let calibration finish before loading a profile.")
+                return
             try:
                 new_settings = load_profile(name)
             except FileNotFoundError:
