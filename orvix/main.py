@@ -605,7 +605,7 @@ async def run_live(
                         on_radial(_radial_state(radial, None, 0.0))
     except LeapConnectionError as exc:
         logger.error(str(exc))
-        raise SystemExit(1) from exc
+        raise
 
 
 def main() -> None:
@@ -624,7 +624,17 @@ def main() -> None:
         calibration.run()
         return
 
-    asyncio.run(run_live(dry_run=args.dry_run, verbose=args.verbose))
+    # SystemExit gets raised out here rather than inside run_live's coroutine,
+    # same reason calibration.run() does it at its own sync entry point: doing
+    # it while asyncio is still finalizing the leap stream's async generator
+    # turns a one line "leapd isn't running" into an unreadable traceback. this
+    # also means callers other than the CLI (the GUI's PipelineWorker) see the
+    # real LeapConnectionError instead of a generic SystemExit, so they can
+    # show the actual connection error instead of a canned message.
+    try:
+        asyncio.run(run_live(dry_run=args.dry_run, verbose=args.verbose))
+    except LeapConnectionError as exc:
+        raise SystemExit(1) from exc
 
 
 if __name__ == "__main__":

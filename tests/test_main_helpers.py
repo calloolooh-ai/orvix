@@ -8,11 +8,14 @@ non-async, non-hardware-dependent surface.
 
 import math
 
+import pytest
+
 from orvix.config import Settings
 from orvix.displays import DesktopBounds
 from orvix.extra_gestures import ExtraGestures, HandSignals
 from orvix.gesture_interpreter import GestureEvent, GestureType
-from orvix.main import _bounds_changed, _build_extras, _compute_signals, _radial_state
+from orvix.leap_client import LeapConnectionError
+from orvix.main import _bounds_changed, _build_extras, _compute_signals, _radial_state, run_live
 from orvix.radial_menu import RadialMenu
 
 
@@ -198,3 +201,28 @@ def test_bounds_changed_detects_a_resize_eg_monitor_unplugged():
 def test_bounds_changed_detects_an_origin_shift():
     fresh = DesktopBounds(-1920.0, 0.0, 3840.0, 1080.0)
     assert _bounds_changed(1920.0, 1080.0, (0.0, 0.0), fresh) == (3840.0, 1080.0, (-1920.0, 0.0))
+
+
+# -- run_live's LeapConnectionError propagation --
+
+
+@pytest.mark.asyncio
+async def test_run_live_lets_leap_connection_error_propagate_unconverted(monkeypatch):
+    """
+    run_live must not turn this into SystemExit itself -- that conversion
+    happens at main()'s sync entry point instead, same reason calibration.run()
+    does it out there rather than inside the coroutine (see its docstring):
+    raising SystemExit while asyncio is still finalizing the leap stream's
+    async generator turns a one line "leapd isn't running" into an unreadable
+    traceback. staying a LeapConnectionError here is also what lets the GUI's
+    PipelineWorker show the real connection error instead of a generic one.
+    """
+
+    async def _boom():
+        raise LeapConnectionError("leapd is not running")
+        yield  # pragma: no cover - unreachable, just makes this an async generator
+
+    monkeypatch.setattr("orvix.main.stream_latest_frames", _boom)
+
+    with pytest.raises(LeapConnectionError, match="not running"):
+        await run_live(dry_run=True, verbose=False, settings=Settings())
