@@ -293,6 +293,24 @@ def test_load_config_keeps_valid_preferred_hand(tmp_path):
     assert loaded.preferred_hand == "first"
 
 
+def test_load_config_falls_back_to_absolute_when_cursor_mode_invalid(tmp_path):
+    path = tmp_path / "config.yaml"
+    save_config(Settings(cursor_mode="relatve"), path)
+
+    loaded = load_config(path)
+
+    assert loaded.cursor_mode == "absolute"
+
+
+def test_load_config_keeps_valid_cursor_mode(tmp_path):
+    path = tmp_path / "config.yaml"
+    save_config(Settings(cursor_mode="tilt"), path)
+
+    loaded = load_config(path)
+
+    assert loaded.cursor_mode == "tilt"
+
+
 def test_list_profiles_empty_when_dir_missing(tmp_path):
     assert list_profiles(tmp_path / "profiles") == []
 

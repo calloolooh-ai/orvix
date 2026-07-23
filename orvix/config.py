@@ -35,6 +35,11 @@ _VALID_GESTURE_ACTIONS = frozenset({"click", "scroll", "disabled"})
 # returns None every single frame, so hand tracking silently never starts.
 _VALID_PREFERRED_HANDS = frozenset({"left", "right", "first"})
 
+# coord_mapper.make_mapper only recognizes "relative" and "tilt" explicitly;
+# anything else (including a typo) falls through to the absolute CoordMapper
+# silently, same silent-misbehavior class as preferred_hand above.
+_VALID_CURSOR_MODES = frozenset({"absolute", "relative", "tilt"})
+
 logger = logging.getLogger(__name__)
 
 # where the user's personal config lives. gitignored on purpose, since it'll
@@ -491,6 +496,28 @@ def _sanitize_preferred_hand(settings: Settings) -> None:
     settings.preferred_hand = "right"
 
 
+def _sanitize_cursor_mode(settings: Settings) -> None:
+    """
+    fall back to "absolute" for a cursor_mode that isn't "absolute"/"relative"/
+    "tilt". coord_mapper.make_mapper doesn't crash on an unknown value -- it
+    just falls through to the absolute CoordMapper, same as an explicit
+    "absolute" -- but that's a silent behavior change (e.g. a typo'd
+    "relatve" quietly switches you to a mode that needs calibration) with no
+    warning anywhere, same class of bug as preferred_hand above. picking
+    "absolute" as the fallback matches what make_mapper already does, so this
+    only adds the warning, it doesn't change actual runtime behavior.
+    """
+    value = settings.cursor_mode
+    if value in _VALID_CURSOR_MODES:
+        return
+    logger.warning(
+        "config field 'cursor_mode' was %r, not 'absolute'/'relative'/'tilt' -- "
+        "falling back to 'absolute'",
+        value,
+    )
+    settings.cursor_mode = "absolute"
+
+
 def _sanitize_settings(settings: Settings) -> Settings:
     """
     clamp fields that would otherwise silently misbehave instead of raising --
@@ -509,6 +536,7 @@ def _sanitize_settings(settings: Settings) -> Settings:
     _sanitize_gesture_action(settings, "grab_action", "scroll")
     _sanitize_thumbs_up_action(settings)
     _sanitize_preferred_hand(settings)
+    _sanitize_cursor_mode(settings)
     return settings
 
 
