@@ -593,7 +593,14 @@ async def run_live(
                 if circle.feed(palm[0], palm[2], now):
                     radial_anchor = mapper.map_to_screen(tuple(palm), now)
                     center = desktop.center
-                    radial.open(center, now)
+                    # seed with the real pinch state on the opening frame --
+                    # RadialMenu.open()'s pinching param exists exactly so a
+                    # pinch already held when the circle completes can't be
+                    # misread as an instant wedge selection on frame one, but
+                    # this call site was never passing it, so it always
+                    # defaulted to False and the guard never actually engaged.
+                    pinching = hand.get("pinchStrength", 0.0) >= settings.pinch_threshold
+                    radial.open(center, now, pinching=pinching)
                     if on_radial is not None:
                         on_radial(_radial_state(radial, None, 0.0))
     except LeapConnectionError as exc:
