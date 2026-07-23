@@ -133,7 +133,7 @@ PY
         exec "$PYTHON" -m orvix.gui
         ;;
     -h|--help|help)
-        sed -n '3,9p' "$SOURCE" | sed 's/^# \{0,1\}//'
+        sed -n '3,12p' "$SOURCE" | sed 's/^# \{0,1\}//'
         ;;
     *)
         echo "orvix: dunno what '$cmd' means. try: orvix [gui|cli|viz|hand|calibrate|status|profile|help]" >&2
