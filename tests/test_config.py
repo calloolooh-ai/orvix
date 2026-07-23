@@ -107,6 +107,22 @@ def test_load_config_swaps_inverted_calibration_axis(tmp_path):
     assert loaded.calibration.x_max == 150.0
 
 
+def test_load_config_fixes_tilt_full_not_above_deadzone(tmp_path):
+    # TiltCoordMapper._deflection computes
+    # `span = max(1e-6, tilt_full - tilt_deadzone)`, which only guards the
+    # degenerate divide-by-zero case -- if tilt_deadzone is at or above
+    # tilt_full, span floors at 1e-6 and the scaled deflection explodes to a
+    # huge number the instant you clear the deadzone, clamping straight to
+    # 1.0. tilt mode stops being a smooth ramp and becomes an all-or-nothing
+    # snap to max speed right at the deadzone edge.
+    path = tmp_path / "config.yaml"
+    save_config(Settings(tilt_deadzone=0.6, tilt_full=0.15), path)
+
+    loaded = load_config(path)
+
+    assert loaded.tilt_full > loaded.tilt_deadzone
+
+
 def test_load_config_falls_back_on_wrong_type_threshold(tmp_path):
     # a hand-edited config.yaml can hold any YAML scalar, not just the right
     # type -- `pinch_threshold: "high"` parses fine as a string and used to

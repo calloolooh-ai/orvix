@@ -495,6 +495,30 @@ def _sanitize_calibration_axis_order(settings: Settings, min_field: str, max_fie
     setattr(settings.calibration, max_field, lo)
 
 
+def _sanitize_tilt_deadzone_order(settings: Settings) -> None:
+    """
+    keep tilt_full above tilt_deadzone -- TiltCoordMapper._deflection computes
+    `span = max(1e-6, tilt_full - tilt_deadzone)`, which only guards the
+    degenerate divide-by-zero case. if tilt_deadzone is at or above tilt_full,
+    span floors at that 1e-6 and `scaled = (mag - tilt_deadzone) / span`
+    explodes to a huge number the instant you clear the deadzone, which then
+    clamps straight to 1.0 -- tilt mode stops being a smooth ramp and becomes
+    an all-or-nothing snap to max speed right at the deadzone edge. push
+    tilt_full up above deadzone instead of touching deadzone itself, since
+    the deadzone's value is tied to the sensor's real measured noise floor
+    (see its own comment above), not an arbitrary choice.
+    """
+    if settings.tilt_full > settings.tilt_deadzone:
+        return
+    fixed = settings.tilt_deadzone + 0.05
+    logger.warning(
+        "config field 'tilt_full' (%r) is not above 'tilt_deadzone' (%r), which breaks the "
+        "tilt ramp -- raising it to %r",
+        settings.tilt_full, settings.tilt_deadzone, fixed,
+    )
+    settings.tilt_full = fixed
+
+
 def _sanitize_gesture_action(settings: Settings, field: str, default: str) -> None:
     """
     fall back to `default` for a pinch_action/grab_action that isn't one of
@@ -596,6 +620,7 @@ def _sanitize_settings(settings: Settings) -> Settings:
     _sanitize_calibration_axis_order(settings, "x_min", "x_max")
     _sanitize_calibration_axis_order(settings, "y_min", "y_max")
     _sanitize_calibration_axis_order(settings, "z_min", "z_max")
+    _sanitize_tilt_deadzone_order(settings)
     _sanitize_radial_actions(settings)
     _sanitize_gesture_action(settings, "pinch_action", "click")
     _sanitize_gesture_action(settings, "grab_action", "scroll")
