@@ -69,14 +69,16 @@ Most Leap-Motion-specific mouse-control repos on GitHub are small, single-gestur
 
 ## 5. Suggested next features to consider, prioritized
 
-1. **Proportional scroll/volume rate** tied to gesture magnitude (grab depth / twist angle), with min/max clamps — small change, directly inspired by Gesture-Controlled-Virtual-Mouse's proportional pinch-to-brightness/volume, likely improves feel immediately.
-2. **Named config profiles**, swappable from the menu bar (e.g. `~/.orvix/profiles/*.yaml`) — low effort given the existing YAML config, clear quality-of-life win (e.g. a "demo/recording" profile vs a "daily use" profile).
-3. **Optional on-screen cursor highlight ring toggle** for normal use (not just the dedicated visualizers) — cheap, useful for screen recordings/demos and for users learning the gesture set.
-4. **Adaptive velocity-based acceleration curve for relative mode** — moderate effort, needs real tuning/testing against Leap's tracking noise; validate with `orvix profile`-style synthetic benchmarking before shipping.
-5. **Defensive single-hand-only enforcement** (ignore a second hand entering the Leap's field) — cheap insurance against edge cases, lower priority given Leap's narrow sensing cone makes bystander interference unlikely compared to an open webcam setup.
-6. **Investigate session-long drift** in relative/tilt mode with real usage logs before building anything — CursorViaCam's correction targets a problem that may or may not actually exist for orvix given the One Euro Filter is already in the pipeline; don't build speculatively.
-7. **Target-aware click assistance** — deprioritized. High implementation cost (macOS Accessibility API integration, per-app variability) for a problem orvix already addresses differently (freeze-on-pinch). Revisit only if freeze-on-pinch turns out insufficient for small UI targets.
-8. **Voice trigger for pause/resume or calibrate** — optional/low priority, keep scope narrow (a couple of trigger phrases, not a full assistant) if pursued at all, since it cuts against orvix's "hands only, nothing else" positioning.
+this list is from the original research pass; see `docs/FEATURE_PLANS.md` for what's actually shipped since then. items 1, 2, 3, 5, and 6 below are all done now — kept here for the original reasoning/context, not as an open TODO list.
+
+1. **Proportional scroll/volume rate** tied to gesture magnitude (grab depth / twist angle), with min/max clamps — small change, directly inspired by Gesture-Controlled-Virtual-Mouse's proportional pinch-to-brightness/volume, likely improves feel immediately. **DONE**, see `docs/FEATURE_PLANS.md` item 1.
+2. **Named config profiles**, swappable from the menu bar (e.g. `~/.orvix/profiles/*.yaml`) — low effort given the existing YAML config, clear quality-of-life win (e.g. a "demo/recording" profile vs a "daily use" profile). **DONE**, see `docs/FEATURE_PLANS.md` item 2.
+3. **Optional on-screen cursor highlight ring toggle** for normal use (not just the dedicated visualizers) — cheap, useful for screen recordings/demos and for users learning the gesture set. **DONE**, see `docs/FEATURE_PLANS.md` item 3.
+4. **Adaptive velocity-based acceleration curve for relative mode** — moderate effort, needs real tuning/testing against Leap's tracking noise; validate with `orvix profile`-style synthetic benchmarking before shipping. Still open.
+5. **Defensive single-hand-only enforcement** (ignore a second hand entering the Leap's field) — cheap insurance against edge cases, lower priority given Leap's narrow sensing cone makes bystander interference unlikely compared to an open webcam setup. **DONE**, see `docs/FEATURE_PLANS.md` item 5.
+6. **Investigate session-long drift** in relative/tilt mode with real usage logs before building anything — CursorViaCam's correction targets a problem that may or may not actually exist for orvix given the One Euro Filter is already in the pipeline; don't build speculatively. **DONE (investigated, no correction needed)**, see `docs/FEATURE_PLANS.md` item 6.
+7. **Target-aware click assistance** — deprioritized. High implementation cost (macOS Accessibility API integration, per-app variability) for a problem orvix already addresses differently (freeze-on-pinch). Revisit only if freeze-on-pinch turns out insufficient for small UI targets. Still open/deprioritized.
+8. **Voice trigger for pause/resume or calibrate** — optional/low priority, keep scope narrow (a couple of trigger phrases, not a full assistant) if pursued at all, since it cuts against orvix's "hands only, nothing else" positioning. Still open/deprioritized.
 
 ## References
 
