@@ -399,6 +399,17 @@ _MIN_CUTOFF_BOUNDS = (0.01, float("inf"))
 # an accidental centre pinch from misfiring. clamped well inside the wheel's
 # actual radius.
 _RADIAL_DEAD_ZONE_BOUNDS = (0.0, 200.0)
+# radial_open_sweep_deg/radial_open_min_radius_mm feed circle_detector.py's
+# CircleDetector directly and neither was in any tuple above either. a sweep
+# threshold of 0 (or negative) means `abs(winding) >= self._threshold` is true
+# on almost any frame with nonzero winding -- the "you have to actually sweep
+# a full loop" gate stops meaning anything, so the radial menu could pop open
+# from ordinary hand jitter. same story for min_radius_mm at 0 or negative:
+# `radius < self._min_radius` can never be true, so the "big enough to be a
+# deliberate loop, not noise" check is gone too. floored both well above zero
+# instead of just non-negative, same reasoning as the zoom/volume step fields.
+_RADIAL_OPEN_SWEEP_BOUNDS = (10.0, 3600.0)
+_RADIAL_OPEN_MIN_RADIUS_BOUNDS = (1.0, 500.0)
 
 
 def _field_default(field: str):
@@ -665,6 +676,8 @@ def _sanitize_settings(settings: Settings) -> Settings:
     for field in _POSITIVE_STEP_FIELDS:
         _clamp_field(settings, field, 0.1, float("inf"))
     _clamp_field(settings, "radial_dead_zone_px", *_RADIAL_DEAD_ZONE_BOUNDS)
+    _clamp_field(settings, "radial_open_sweep_deg", *_RADIAL_OPEN_SWEEP_BOUNDS)
+    _clamp_field(settings, "radial_open_min_radius_mm", *_RADIAL_OPEN_MIN_RADIUS_BOUNDS)
     _clamp_field(settings, "one_euro_min_cutoff", *_MIN_CUTOFF_BOUNDS)
     _clamp_field(settings, "one_euro_beta", 0.0, float("inf"))
     _sanitize_threshold_order(settings, "pinch_threshold", "pinch_release_threshold")

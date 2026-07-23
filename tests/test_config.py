@@ -85,6 +85,24 @@ def test_load_config_clamps_radial_dead_zone_px(tmp_path):
     assert loaded2.radial_dead_zone_px == 0.0
 
 
+def test_load_config_clamps_radial_open_fields(tmp_path):
+    # circle_detector.py's CircleDetector fires when abs(winding) >= threshold
+    # and treats a loop as real only once radius >= min_radius. a sweep
+    # threshold or min radius of 0 (or negative) means those checks are
+    # basically always true, so the "you have to actually sweep a deliberate
+    # full loop" gate stops meaning anything and the wheel could pop open from
+    # ordinary hand jitter. floor both well above zero.
+    path = tmp_path / "config.yaml"
+    save_config(
+        Settings(radial_open_sweep_deg=-50.0, radial_open_min_radius_mm=0.0), path
+    )
+
+    loaded = load_config(path)
+
+    assert loaded.radial_open_sweep_deg == 10.0
+    assert loaded.radial_open_min_radius_mm == 1.0
+
+
 def test_load_config_clamps_one_euro_filter_fields(tmp_path):
     # one_euro_filter.py's _smoothing_factor computes r / (r + 1) where
     # r = 2*pi*cutoff*t_e -- a negative enough one_euro_min_cutoff drives
