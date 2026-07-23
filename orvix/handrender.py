@@ -202,6 +202,14 @@ def _run_reader(state: HandsState, stop: threading.Event) -> None:
             state.set_error(str(exc))
         except Exception as exc:  # noqa: BLE001 - surface, don't crash the app
             state.set_error(f"leapd stream stopped: {exc}")
+        else:
+            # the for loop only falls through to here if stream_latest_frames
+            # ended on its own with no exception, i.e. leapd closed the
+            # websocket cleanly mid-session -- a user-requested stop always
+            # hits the `return` above instead, which skips this else clause.
+            # without this the view would just freeze on the last frame with
+            # no indication anything went wrong, same bug main.py/gui.py had.
+            state.set_error("lost connection to leapd mid-session")
 
     try:
         loop.run_until_complete(pump())

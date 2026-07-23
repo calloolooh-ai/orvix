@@ -9,8 +9,18 @@ the AppKit drawing itself isn't covered here (no meaningful way to assert on
 pixels drawn to an offscreen view), this is the logic upstream of that.
 """
 
+import threading
+
+import orvix.handrender as handrender
 from orvix.config import Settings
-from orvix.handrender import HandsState, _clamp, _load_calibration, _map_range, _parse_frame
+from orvix.handrender import (
+    HandsState,
+    _clamp,
+    _load_calibration,
+    _map_range,
+    _parse_frame,
+    _run_reader,
+)
 
 
 # -- _clamp / _map_range --
@@ -182,3 +192,35 @@ def test_load_calibration_falls_back_to_defaults_on_a_broken_config(monkeypatch)
 
 def test_load_calibration_uses_the_real_config_when_its_fine():
     assert _load_calibration() is not None
+
+
+# -- _run_reader --
+
+
+def test_run_reader_sets_error_when_leapd_stream_ends_cleanly(monkeypatch):
+    # a clean end of stream_latest_frames (leapd closing the websocket
+    # mid-session) must not look like the user having stopped the
+    # visualizer -- it should surface as a real error in state.
+    async def empty_stream():
+        return
+        yield  # pragma: no cover - makes this an async generator
+
+    monkeypatch.setattr(handrender, "stream_latest_frames", empty_stream)
+    state = HandsState()
+    _run_reader(state, threading.Event())
+    assert state.snapshot()["error"] == "lost connection to leapd mid-session"
+
+
+def test_run_reader_sets_no_error_on_a_real_requested_stop(monkeypatch):
+    # the counterpart: stop.set() before the stream yields anything must
+    # exit quietly with no error, since that's a normal user-requested stop.
+    async def one_frame_forever():
+        while True:
+            yield {"hands": []}
+
+    monkeypatch.setattr(handrender, "stream_latest_frames", one_frame_forever)
+    state = HandsState()
+    stop = threading.Event()
+    stop.set()
+    _run_reader(state, stop)
+    assert state.snapshot()["error"] is None

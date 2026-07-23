@@ -5,7 +5,10 @@ split as test_handrender.py -- the AppKit drawing isn't covered, the logic
 feeding it is.
 """
 
-from orvix.handviz import HandState, Ripple, _clamp, _ease_out
+import threading
+
+import orvix.handviz as handviz
+from orvix.handviz import HandState, Ripple, _clamp, _ease_out, _run_reader
 
 
 def test_clamp_bounds_both_directions():
@@ -58,6 +61,38 @@ def test_hand_state_seq_increments_across_repeated_updates():
     for _ in range(5):
         state.update(False, (0.0, 0.0, 0.0), 0.0, {}, 0.0, 0.0)
     assert state.snapshot()["seq"] == 5
+
+
+# -- _run_reader --
+
+
+def test_run_reader_sets_error_when_leapd_stream_ends_cleanly(monkeypatch):
+    # a clean end of stream_latest_frames (leapd closing the websocket
+    # mid-session) must not look like the user having stopped the
+    # visualizer -- it should surface as a real error in state.
+    async def empty_stream():
+        return
+        yield  # pragma: no cover - makes this an async generator
+
+    monkeypatch.setattr(handviz, "stream_latest_frames", empty_stream)
+    state = HandState()
+    _run_reader(state, threading.Event())
+    assert state.snapshot()["error"] == "lost connection to leapd mid-session"
+
+
+def test_run_reader_sets_no_error_on_a_real_requested_stop(monkeypatch):
+    # the counterpart: stop.set() before the stream yields anything must
+    # exit quietly with no error, since that's a normal user-requested stop.
+    async def one_frame_forever():
+        while True:
+            yield {"hands": []}
+
+    monkeypatch.setattr(handviz, "stream_latest_frames", one_frame_forever)
+    state = HandState()
+    stop = threading.Event()
+    stop.set()
+    _run_reader(state, stop)
+    assert state.snapshot()["error"] is None
 
 
 # -- Ripple --
