@@ -9,7 +9,8 @@ the AppKit drawing itself isn't covered here (no meaningful way to assert on
 pixels drawn to an offscreen view), this is the logic upstream of that.
 """
 
-from orvix.handrender import HandsState, _clamp, _map_range, _parse_frame
+from orvix.config import Settings
+from orvix.handrender import HandsState, _clamp, _load_calibration, _map_range, _parse_frame
 
 
 # -- _clamp / _map_range --
@@ -158,3 +159,26 @@ def test_parse_frame_collects_every_joint_thats_present():
     hand = _parse_frame(frame)[0]
     joints = hand["fingers"][1]["joints"]
     assert joints == [(1.0, 0.0, 0.0), (2.0, 0.0, 0.0), (3.0, 0.0, 0.0), (4.0, 0.0, 0.0), (5.0, 0.0, 0.0)]
+
+
+# -- _load_calibration --
+
+
+def test_load_calibration_falls_back_to_defaults_on_a_broken_config(monkeypatch):
+    """
+    same gap run_live's CLI path, gui.py, and calibration.py all already
+    guard against: invalid yaml, or valid yaml that isn't a mapping at the
+    top level, makes load_config() crash. handrender loads its calibration
+    box once at import time via this helper, so a broken config.yaml used to
+    take down `orvix hand` before it ever got to draw anything.
+    """
+
+    def _boom():
+        raise ValueError("top-level yaml wasn't a mapping")
+
+    monkeypatch.setattr("orvix.handrender.load_config", _boom)
+    assert _load_calibration() == Settings().calibration
+
+
+def test_load_calibration_uses_the_real_config_when_its_fine():
+    assert _load_calibration() is not None

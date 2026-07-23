@@ -44,7 +44,7 @@ import asyncio
 import logging
 import threading
 
-from orvix.config import load_config
+from orvix.config import Settings, load_config
 from orvix.leap_client import (
     LeapConnectionError,
     stream_latest_frames,
@@ -77,10 +77,24 @@ _JOINT_KEYS = (
     "tipPosition",
 )
 
+def _load_calibration():
+    """
+    invalid yaml, or valid yaml that isn't a mapping at the top level, makes
+    load_config() crash -- the same gap run_live's CLI path, gui.py, and
+    calibration.py all already guard against, just one more call site (this
+    one hit at import time) that got missed.
+    """
+    try:
+        return load_config().calibration
+    except Exception as exc:  # noqa: BLE001 - a bad config file must not crash the visualizer
+        logger.warning("failed to load config, falling back to defaults: %s", exc)
+        return Settings().calibration
+
+
 # the same calibration box orvix's real cursor maps against (from
 # ~/.orvix/config.yaml if you've run `orvix calibrate`, otherwise config.py's
 # defaults). loaded once at import time since it doesn't change mid-session.
-_CALIBRATION = load_config().calibration
+_CALIBRATION = _load_calibration()
 
 
 def _clamp(v: float, lo: float, hi: float) -> float:
