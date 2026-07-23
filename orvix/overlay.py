@@ -181,7 +181,6 @@ class OverlayController:
     def __init__(self) -> None:
         self._window = None
         self._view = None
-        self._screen_height = None
         self._warned = False
 
     @property
@@ -225,14 +224,19 @@ class OverlayController:
         window.setContentView_(view)
         self._window = window
         self._view = view
-        self._screen_height = AppKit.NSScreen.mainScreen().frame().size.height
 
     def _show(self, state: dict) -> None:
         self._ensure_window()
         cx, cy = state["center"]
-        # mapper hands us Quartz top-left screen coords; Cocoa windows are
-        # bottom-left, so flip y against the main screen height.
-        cocoa_y = (self._screen_height or 0) - cy
+        # mainScreen can change (a different display becomes primary, or the
+        # primary's resolution changes) any time after the window was first
+        # created, so read it fresh on every show instead of caching it once
+        # -- same class of bug as displays.py's desktop bounds going stale
+        # across a monitor plug/unplug. mapper hands us Quartz top-left
+        # screen coords; Cocoa windows are bottom-left, so flip y against
+        # the current main screen height.
+        screen_height = AppKit.NSScreen.mainScreen().frame().size.height
+        cocoa_y = screen_height - cy
         origin_x = cx - _BOX / 2.0
         origin_y = cocoa_y - _BOX / 2.0
         self._window.setFrameOrigin_((origin_x, origin_y))

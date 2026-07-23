@@ -71,17 +71,33 @@ def test_render_none_after_a_show_hides_without_crashing():
 
 
 def test_show_flips_quartz_y_into_cocoa_bottom_left_coords():
+    import AppKit
+
     ctl = OverlayController()
-    ctl._ensure_window()
-    ctl._screen_height = 1000.0
+    screen_height = AppKit.NSScreen.mainScreen().frame().size.height
     state = {"actions": ["copy"], "hovered": None, "progress": 0.0, "center": (400.0, 250.0)}
     ctl._show(state)
-    # cocoa_y = screen_height - cy = 1000 - 250 = 750; window origin is
-    # centered on that point minus half the box size.
+    # cocoa_y = screen_height - cy; window origin is centered on that point
+    # minus half the box size. reads the real mainScreen height fresh on
+    # every show rather than caching it once, so this uses the same live
+    # value _show() itself just read.
     origin = ctl._window.frame().origin
     box = overlay._BOX
     assert origin.x == pytest.approx(400.0 - box / 2.0)
-    assert origin.y == pytest.approx(750.0 - box / 2.0)
+    assert origin.y == pytest.approx(screen_height - 250.0 - box / 2.0)
+
+
+def test_show_has_no_cached_screen_height_left_on_the_controller():
+    # _show() used to cache mainScreen's height once in _ensure_window() and
+    # never refresh it, so a display change later in a long session would
+    # silently misposition the wheel for the rest of it -- same bug class as
+    # displays.py's desktop bounds going stale across a monitor plug/unplug.
+    # AppKit itself can't be faked to prove the re-read happens (PyObjC
+    # classes don't support attribute patching), so this just documents that
+    # the stale-cache field is gone rather than merely unused.
+    ctl = OverlayController()
+    ctl._ensure_window()
+    assert not hasattr(ctl, "_screen_height")
 
 
 def test_repeated_show_reuses_the_same_window():
