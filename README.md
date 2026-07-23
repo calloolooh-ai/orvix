@@ -62,6 +62,7 @@ orvix viz          # full-screen "energy field" hand visualizer (see below)
 orvix hand         # full-screen rendered-hand skeleton visualizer (see below)
 orvix calibrate    # terminal calibration flow
 orvix status       # check leapd + device + config, launches nothing
+orvix profile      # synthetic filter lag/jitter + dispatch throughput report (see below)
 ```
 
 `orvix` doesn't start leapd, and doesn't need to: leapd installs as a LaunchDaemon with `KeepAlive=true`, so launchd already keeps it alive at boot. the launcher just checks it's up and tells you how to kick it if it isn't.
