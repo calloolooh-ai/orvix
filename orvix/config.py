@@ -442,6 +442,33 @@ def _sanitize_radial_actions(settings: Settings) -> None:
         settings.radial_actions = valid
 
 
+def _sanitize_threshold_order(settings: Settings, on_field: str, release_field: str) -> None:
+    """
+    keep release_threshold below threshold for both pinch and grab -- the
+    hysteresis pinch_release_threshold's own docstring describes only holds
+    if release stays lower. each field is already clamped to [0, 1]
+    independently by _UNIT_INTERVAL_FIELDS, so a hand-edited config.yaml with
+    them swapped or a release_threshold nudged above threshold wouldn't
+    raise, it'd just make gesture_interpreter.py's DOWN/DRAGGING states see
+    "released" on the very next frame after "started" -- a click or grab
+    that fires but can never actually hold or drag, no matter how long you
+    keep your fingers together. push release back down to a small margin
+    under threshold rather than picking an arbitrary default, so it still
+    respects how tight the user set threshold itself.
+    """
+    on_value = getattr(settings, on_field)
+    release_value = getattr(settings, release_field)
+    if release_value < on_value:
+        return
+    fixed = max(0.0, on_value - 0.05)
+    logger.warning(
+        "config field %r (%r) is not lower than %r (%r), which breaks its hysteresis -- "
+        "lowering it to %r",
+        release_field, release_value, on_field, on_value, fixed,
+    )
+    setattr(settings, release_field, fixed)
+
+
 def _sanitize_gesture_action(settings: Settings, field: str, default: str) -> None:
     """
     fall back to `default` for a pinch_action/grab_action that isn't one of
@@ -538,6 +565,8 @@ def _sanitize_settings(settings: Settings) -> Settings:
         _clamp_field(settings, field, 0.0, float("inf"))
     for field in _POSITIVE_STEP_FIELDS:
         _clamp_field(settings, field, 0.1, float("inf"))
+    _sanitize_threshold_order(settings, "pinch_threshold", "pinch_release_threshold")
+    _sanitize_threshold_order(settings, "grab_threshold", "grab_release_threshold")
     _sanitize_radial_actions(settings)
     _sanitize_gesture_action(settings, "pinch_action", "click")
     _sanitize_gesture_action(settings, "grab_action", "scroll")

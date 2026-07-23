@@ -63,6 +63,30 @@ def test_load_config_clamps_zero_or_negative_step_fields(tmp_path):
     assert loaded.volume_step_deg == 0.1
 
 
+def test_load_config_fixes_release_threshold_not_lower_than_trigger(tmp_path):
+    # pinch_release_threshold/grab_release_threshold have to stay below their
+    # trigger threshold for the hysteresis to do anything -- if a hand-edited
+    # config.yaml has them swapped or equal, gesture_interpreter.py's DOWN
+    # state would see "released" on the very next frame after "started", so
+    # a pinch or grab can never actually hold or drag no matter how long you
+    # keep your fingers together.
+    path = tmp_path / "config.yaml"
+    save_config(
+        Settings(
+            pinch_threshold=0.75,
+            pinch_release_threshold=0.9,
+            grab_threshold=0.6,
+            grab_release_threshold=0.6,
+        ),
+        path,
+    )
+
+    loaded = load_config(path)
+
+    assert loaded.pinch_release_threshold < loaded.pinch_threshold
+    assert loaded.grab_release_threshold < loaded.grab_threshold
+
+
 def test_load_config_falls_back_on_wrong_type_threshold(tmp_path):
     # a hand-edited config.yaml can hold any YAML scalar, not just the right
     # type -- `pinch_threshold: "high"` parses fine as a string and used to
