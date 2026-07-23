@@ -163,3 +163,7 @@ checked profile save-as and delete for the same class of bug afterward -- both a
 ## nothing found (cycle 106) + coverage artifacts weren't gitignored (cycle 109)
 
 cycle 106 double-checked the calibration mutual-exclusion fixes from 104-105 had no more gaps, confirmed clean. cycle 108 checked main.py's argparse-based CLI entry point, config.py's profile name validation (already path-traversal safe), and the `orvix profile` benchmark subcommand -- all clean. cycle 109 noticed `.coverage`/`htmlcov/` were never gitignored, so any coverage.py pass (cycle 81 needed one and found a real gap) left an untracked artifact sitting in the repo. added them to .gitignore.
+
+## dead target_fps field (cycle 113)
+
+`Settings.target_fps` in config.py looked like a real knob for the pipeline's frame rate but nothing ever read `settings.target_fps` anywhere. perf.py has its own completely separate local `target_fps` parameter used only for benchmarking, unrelated to the Settings field. dropped the dead field and cleaned up two spots in FEATURE_PLANS.md that pointed at it as if it controlled the real frame budget. checked every other Settings field for the same kind of dead-config bug afterward (cycle 114), all of them are actually read somewhere, this was the only one.
