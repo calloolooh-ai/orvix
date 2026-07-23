@@ -266,6 +266,15 @@ def test_save_then_load_round_trips_thumbs_up_action(tmp_path):
     assert loaded.thumbs_up_action == "undo"
 
 
+def test_load_config_falls_back_to_confirm_when_thumbs_up_action_invalid(tmp_path):
+    path = tmp_path / "config.yaml"
+    save_config(Settings(thumbs_up_action="typo_action"), path)
+
+    loaded = load_config(path)
+
+    assert loaded.thumbs_up_action == "confirm"
+
+
 def test_list_profiles_empty_when_dir_missing(tmp_path):
     assert list_profiles(tmp_path / "profiles") == []
 

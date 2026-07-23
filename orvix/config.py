@@ -18,6 +18,7 @@ from pathlib import Path
 import yaml
 
 from orvix.shortcuts import DEFAULT_RADIAL_ACTIONS as _DEFAULT_RADIAL_ACTIONS
+from orvix.shortcuts import NAMED_SHORTCUTS as _NAMED_SHORTCUTS
 from orvix.shortcuts import RADIAL_SHORTCUTS as _RADIAL_SHORTCUTS
 
 _VALID_RADIAL_ACTIONS = frozenset({*_RADIAL_SHORTCUTS, "close"})
@@ -445,6 +446,26 @@ def _sanitize_gesture_action(settings: Settings, field: str, default: str) -> No
     setattr(settings, field, default)
 
 
+def _sanitize_thumbs_up_action(settings: Settings) -> None:
+    """
+    fall back to "confirm" for a thumbs_up_action that isn't a real
+    shortcuts.NAMED_SHORTCUTS entry. main.py's NAMED_SHORTCUTS.get() and
+    gui.py's NAMED_SHORTCUT_LABELS.get() both already fall back gracefully
+    on an unknown value, so this can't crash like the old pinch/grab bug --
+    but without this, a typo'd value (hand-edited yaml, or a stale name from
+    a since-renamed shortcut) silently does nothing forever with no warning
+    anywhere, same silent-misbehavior reasoning as _sanitize_radial_actions.
+    """
+    value = settings.thumbs_up_action
+    if value in _NAMED_SHORTCUTS:
+        return
+    logger.warning(
+        "config field 'thumbs_up_action' was %r, not a known shortcut -- falling back to 'confirm'",
+        value,
+    )
+    settings.thumbs_up_action = "confirm"
+
+
 def _sanitize_settings(settings: Settings) -> Settings:
     """
     clamp fields that would otherwise silently misbehave instead of raising --
@@ -461,6 +482,7 @@ def _sanitize_settings(settings: Settings) -> Settings:
     _sanitize_radial_actions(settings)
     _sanitize_gesture_action(settings, "pinch_action", "click")
     _sanitize_gesture_action(settings, "grab_action", "scroll")
+    _sanitize_thumbs_up_action(settings)
     return settings
 
 
