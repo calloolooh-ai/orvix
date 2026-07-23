@@ -500,6 +500,38 @@ def test_calibrate_starts_when_not_already_calibrating(isolated_app, monkeypatch
     assert isolated_app._calibrating is True
 
 
+def test_toggle_running_refuses_to_start_the_pipeline_while_calibrating(isolated_app, monkeypatch):
+    # the reverse of test_calibrate_refuses_a_second_run_while_one_is_in_progress:
+    # starting the live pipeline mid-calibration would have both threads
+    # holding their own leapd stream open and racing each other for
+    # self._cal_tracker/self.settings.calibration/save_config, the exact
+    # race _calibrate's own guard exists to prevent, just triggered the
+    # other way around since _toggle_running never checked _calibrating.
+    fake_worker = _FakeRunningWorker()
+    fake_worker.running = False
+    isolated_app.worker = fake_worker
+    alerts = []
+    monkeypatch.setattr(gui.rumps, "alert", lambda *a, **k: alerts.append(a))
+
+    isolated_app._calibrating = True
+    isolated_app._toggle_running(None)
+
+    assert fake_worker.start_calls == []
+    assert len(alerts) == 1
+    assert "calibration" in alerts[0][1]
+
+
+def test_toggle_running_starts_the_pipeline_normally_when_not_calibrating(isolated_app, monkeypatch):
+    fake_worker = _FakeRunningWorker()
+    fake_worker.running = False
+    isolated_app.worker = fake_worker
+    monkeypatch.setattr(gui.rumps, "alert", lambda *a, **k: None)
+
+    isolated_app._toggle_running(None)
+
+    assert len(fake_worker.start_calls) == 1
+
+
 def test_run_calibration_shows_waiting_for_hand_before_the_blocking_call(isolated_app, monkeypatch):
     # wait_for_hand blocks for up to 30s with no progress callbacks at all,
     # so without an upfront status update the menu bar looks frozen right

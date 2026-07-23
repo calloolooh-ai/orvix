@@ -429,6 +429,14 @@ class OrvixApp(rumps.App):
         if self.worker.running:
             self.worker.stop()
         else:
+            if self._calibrating:
+                # mirrors the guard _calibrate has against starting live
+                # while calibrating: without this, both threads would hold
+                # their own leapd stream open and race each other for
+                # self._cal_tracker/self.settings.calibration/save_config,
+                # same class of problem _calibrate already refuses.
+                rumps.alert("orvix", "let calibration finish before starting the live pipeline.")
+                return
             self.worker.start(self.settings, dry_run=self.dry_run.state)
 
     def _toggle_dry_run(self, sender: rumps.MenuItem) -> None:
