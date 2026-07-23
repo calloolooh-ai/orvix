@@ -376,6 +376,16 @@ _NONNEGATIVE_SECONDS_FIELDS = (
 # with no recovery short of a force-quit. floor them well above zero instead
 # of just non-negative like the seconds fields above.
 _POSITIVE_STEP_FIELDS = ("zoom_step_mm", "volume_step_deg")
+# radial_dead_zone_px isn't in any tuple above and never got a clamp of its
+# own. RadialMenu's wheel window is _BOX = 460px (overlay.py) centered on the
+# pointer, so a dead zone that reaches anywhere near that radius (or a
+# hand-edited config with a huge or negative value) breaks the wheel: too
+# large and _wedge_at() never returns a hovered wedge, so every pinch just
+# dismisses and dwell can never accumulate; negative doesn't crash but
+# silently removes the dead zone the docstring says exists on purpose to keep
+# an accidental centre pinch from misfiring. clamped well inside the wheel's
+# actual radius.
+_RADIAL_DEAD_ZONE_BOUNDS = (0.0, 200.0)
 
 
 def _field_default(field: str):
@@ -641,6 +651,7 @@ def _sanitize_settings(settings: Settings) -> Settings:
         _clamp_field(settings, field, 0.0, float("inf"))
     for field in _POSITIVE_STEP_FIELDS:
         _clamp_field(settings, field, 0.1, float("inf"))
+    _clamp_field(settings, "radial_dead_zone_px", *_RADIAL_DEAD_ZONE_BOUNDS)
     _sanitize_threshold_order(settings, "pinch_threshold", "pinch_release_threshold")
     _sanitize_threshold_order(settings, "grab_threshold", "grab_release_threshold")
     _sanitize_calibration_axis_order(settings, "x_min", "x_max")

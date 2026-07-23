@@ -64,6 +64,27 @@ def test_load_config_clamps_zero_or_negative_step_fields(tmp_path):
     assert loaded.volume_step_deg == 0.1
 
 
+def test_load_config_clamps_radial_dead_zone_px(tmp_path):
+    # RadialMenu's wheel window is only 460px (overlay.py's _BOX), centered on
+    # the pointer -- a dead zone anywhere near that radius makes _wedge_at()
+    # never return a hovered wedge, so every pinch just dismisses and dwell
+    # can never accumulate. negative doesn't crash but silently removes the
+    # dead zone the docstring says exists on purpose. clamp both directions.
+    path = tmp_path / "config.yaml"
+    save_config(Settings(radial_dead_zone_px=5000.0), path)
+
+    loaded = load_config(path)
+
+    assert loaded.radial_dead_zone_px == 200.0
+
+    path2 = tmp_path / "config2.yaml"
+    save_config(Settings(radial_dead_zone_px=-10.0), path2)
+
+    loaded2 = load_config(path2)
+
+    assert loaded2.radial_dead_zone_px == 0.0
+
+
 def test_load_config_fixes_release_threshold_not_lower_than_trigger(tmp_path):
     # pinch_release_threshold/grab_release_threshold have to stay below their
     # trigger threshold for the hysteresis to do anything -- if a hand-edited
