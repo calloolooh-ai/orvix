@@ -688,7 +688,12 @@ class OrvixApp(rumps.App):
         threading.Thread(target=self._run_calibration, daemon=True).start()
 
     def _quit(self, sender: rumps.MenuItem) -> None:
-        self.worker.stop()
+        # wait=True so the leapd websocket actually gets closed (see
+        # PipelineWorker._shutdown_loop) before the process exits and the
+        # daemon thread running it gets killed mid cleanup -- same leak this
+        # already gets fixed for on every restart path, quitting shouldn't
+        # be the one way left to leave a connection open.
+        self.worker.stop(wait=True)
         rumps.quit_application()
 
     # -- worker callbacks (invoked from the background thread, must hop

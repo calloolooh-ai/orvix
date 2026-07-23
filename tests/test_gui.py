@@ -274,6 +274,21 @@ def test_every_pipeline_restart_path_shows_restarting_status_first(isolated_app,
     assert isolated_app.status_item.title == "status: restarting..."
 
 
+def test_quit_waits_for_the_pipeline_to_stop_before_quitting_the_app(isolated_app, monkeypatch):
+    # same leak _quit could otherwise cause as the restart paths above: without
+    # wait=True the process can exit before the worker's background thread
+    # gets to close the leapd websocket, see PipelineWorker._shutdown_loop.
+    fake_worker = _FakeRunningWorker()
+    isolated_app.worker = fake_worker
+    quit_calls = []
+    monkeypatch.setattr(gui.rumps, "quit_application", lambda *a, **k: quit_calls.append(a))
+
+    isolated_app._quit(None)
+
+    assert fake_worker.stop_calls == [True]
+    assert len(quit_calls) == 1
+
+
 def test_cursor_ring_toggle_reflects_settings_default_off(isolated_app):
     assert bool(isolated_app.cursor_ring_toggle.state) is False
 
