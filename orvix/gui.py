@@ -381,10 +381,11 @@ class OrvixApp(rumps.App):
             on_radial=self._handle_radial,
             on_dwell=self._handle_dwell,
         )
-        # gesture events can fire at up to target_fps (100/s by default), way
-        # more often than a menu bar label needs redrawing. throttle how
-        # often we hop to the main thread for a status update so a fast
-        # hand doesn't spam Cocoa with selector calls.
+        # gesture events can fire as often as leapd streams frames (~100/s
+        # on real hardware), way more often than a menu bar label needs
+        # redrawing. throttle how often we hop to the main thread for a
+        # status update so a fast hand doesn't spam Cocoa with selector
+        # calls.
         self._last_event_ui_update = 0.0
         self._last_cal_ui_update = 0.0
         self._last_cal_hud_update = 0.0
