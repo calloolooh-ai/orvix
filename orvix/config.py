@@ -30,6 +30,11 @@ _VALID_RADIAL_ACTIONS = frozenset({*_RADIAL_SHORTCUTS, "close"})
 # profile load. same class of bug as radial_actions below.
 _VALID_GESTURE_ACTIONS = frozenset({"click", "scroll", "disabled"})
 
+# leap_client.pick_hand only ever matches "left"/"right" by exact hand.get("type")
+# equality, or takes the "first" shortcut path -- anything else means pick_hand
+# returns None every single frame, so hand tracking silently never starts.
+_VALID_PREFERRED_HANDS = frozenset({"left", "right", "first"})
+
 logger = logging.getLogger(__name__)
 
 # where the user's personal config lives. gitignored on purpose, since it'll
@@ -466,6 +471,26 @@ def _sanitize_thumbs_up_action(settings: Settings) -> None:
     settings.thumbs_up_action = "confirm"
 
 
+def _sanitize_preferred_hand(settings: Settings) -> None:
+    """
+    fall back to "right" for a preferred_hand that isn't "left"/"right"/"first".
+    unlike pinch_action/grab_action, an unknown value here doesn't crash
+    anything -- pick_hand's `hand.get("type") == preferred_hand` check just
+    never matches, so a hand is never picked and tracking silently never
+    starts, with no error anywhere to explain why. same silent-misbehavior
+    reasoning as _sanitize_thumbs_up_action.
+    """
+    value = settings.preferred_hand
+    if value in _VALID_PREFERRED_HANDS:
+        return
+    logger.warning(
+        "config field 'preferred_hand' was %r, not 'left'/'right'/'first' -- "
+        "falling back to 'right'",
+        value,
+    )
+    settings.preferred_hand = "right"
+
+
 def _sanitize_settings(settings: Settings) -> Settings:
     """
     clamp fields that would otherwise silently misbehave instead of raising --
@@ -483,6 +508,7 @@ def _sanitize_settings(settings: Settings) -> Settings:
     _sanitize_gesture_action(settings, "pinch_action", "click")
     _sanitize_gesture_action(settings, "grab_action", "scroll")
     _sanitize_thumbs_up_action(settings)
+    _sanitize_preferred_hand(settings)
     return settings
 
 

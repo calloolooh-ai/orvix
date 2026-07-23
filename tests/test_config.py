@@ -275,6 +275,24 @@ def test_load_config_falls_back_to_confirm_when_thumbs_up_action_invalid(tmp_pat
     assert loaded.thumbs_up_action == "confirm"
 
 
+def test_load_config_falls_back_to_right_when_preferred_hand_invalid(tmp_path):
+    path = tmp_path / "config.yaml"
+    save_config(Settings(preferred_hand="lft"), path)
+
+    loaded = load_config(path)
+
+    assert loaded.preferred_hand == "right"
+
+
+def test_load_config_keeps_valid_preferred_hand(tmp_path):
+    path = tmp_path / "config.yaml"
+    save_config(Settings(preferred_hand="first"), path)
+
+    loaded = load_config(path)
+
+    assert loaded.preferred_hand == "first"
+
+
 def test_list_profiles_empty_when_dir_missing(tmp_path):
     assert list_profiles(tmp_path / "profiles") == []
 
