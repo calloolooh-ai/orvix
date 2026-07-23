@@ -106,8 +106,9 @@ class HandSignals:
     two_hand_pinch_span: float | None = None
     # wrist-twist angle (rad) while the primary hand is a fist, else None
     fist_roll_rad: float | None = None
-    # screen-space cursor point on a frame where the hand is idly hovering
-    # (nothing else happening), else None. drives dwell-click.
+    # raw palm position (mm, Leap space, not screen pixels) on a frame where
+    # the hand is idly hovering (nothing else happening), else None. drives
+    # dwell-click.
     hover_point: tuple[float, float] | None = None
     palms_out: bool = False
     thumbs_up: bool = False
@@ -180,8 +181,8 @@ class _VolumeTwistDetector:
 
 
 class _DwellClicker:
-    def __init__(self, radius_px: float, dwell_seconds: float):
-        self._radius = radius_px
+    def __init__(self, radius_mm: float, dwell_seconds: float):
+        self._radius = radius_mm
         self._dwell = dwell_seconds
         self._anchor: tuple[float, float] | None = None
         self._since = 0.0
@@ -256,7 +257,7 @@ class ExtraGestures:
         confirm_enabled: bool = True,
         zoom_step_mm: float = 14.0,
         volume_step_deg: float = 12.0,
-        dwell_radius_px: float = 18.0,
+        dwell_radius_mm: float = 18.0,
         dwell_seconds: float = 0.8,
         pause_hold_seconds: float = 0.6,
         confirm_hold_seconds: float = 0.5,
@@ -269,7 +270,7 @@ class ExtraGestures:
 
         self._zoom = _ZoomDetector(zoom_step_mm)
         self._volume = _VolumeTwistDetector(math.radians(volume_step_deg))
-        self._dwell = _DwellClicker(dwell_radius_px, dwell_seconds)
+        self._dwell = _DwellClicker(dwell_radius_mm, dwell_seconds)
         self._pause = _HoldToggle(pause_hold_seconds)
         self._confirm = _HoldToggle(confirm_hold_seconds)
 

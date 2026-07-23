@@ -52,7 +52,7 @@ def make(**kw):
     base = dict(
         zoom_step_mm=10.0,
         volume_step_deg=10.0,
-        dwell_radius_px=18.0,
+        dwell_radius_mm=18.0,
         dwell_seconds=0.6,
         pause_hold_seconds=0.4,
         confirm_hold_seconds=0.4,

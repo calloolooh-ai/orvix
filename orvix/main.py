@@ -250,7 +250,7 @@ def _build_extras(settings: Settings) -> ExtraGestures:
         confirm_enabled=settings.thumbs_up_confirm_enabled,
         zoom_step_mm=settings.zoom_step_mm,
         volume_step_deg=settings.volume_step_deg,
-        dwell_radius_px=settings.dwell_click_radius_mm,  # judged in palm mm
+        dwell_radius_mm=settings.dwell_click_radius_mm,
         dwell_seconds=settings.dwell_click_seconds,
         pause_hold_seconds=settings.pause_hold_seconds,
         confirm_hold_seconds=settings.confirm_hold_seconds,
