@@ -204,6 +204,15 @@ class PipelineWorker:
         except Exception as exc:  # noqa: BLE001 - surface anything unexpected to the menu bar rather than dying silently
             logger.exception("live pipeline crashed")
             self._on_error(str(exc))
+        else:
+            # run_live only returns normally when its stream_latest_frames
+            # loop ends on its own -- the one documented case is leapd
+            # closing the websocket connection cleanly mid-session (see
+            # leap_client.py's stream_frames docstring). a user-requested
+            # stop always cancels the task instead and lands in the except
+            # above, so reaching here means tracking was silently lost and
+            # would otherwise look identical to the user pressing Stop.
+            self._on_error("lost connection to leapd mid-session, see docs/SETUP.md")
         finally:
             self._shutdown_loop(loop)
             self._loop = None

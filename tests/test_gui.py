@@ -11,6 +11,9 @@ up the Cocoa run loop. what every test guards against is touching the real
 save_config are monkeypatched everywhere, never left to hit disk.
 """
 
+import asyncio
+import time
+
 import pytest
 
 import orvix.gui as gui
@@ -218,6 +221,56 @@ def test_multi_monitor_toggle_flips_the_setting(isolated_app):
 
     assert isolated_app.settings.multi_monitor is False
     assert bool(sender.state) is False
+
+
+def test_worker_reports_an_error_when_leapd_drops_the_connection_mid_session(monkeypatch):
+    # run_live only ever returns normally (no exception) in the one case its
+    # own async-for loop ends on its own: leapd closing the websocket cleanly
+    # mid-session (see leap_client.py's stream_frames docstring). a real
+    # user-requested stop() always cancels the task instead, landing in
+    # PipelineWorker's CancelledError branch. before this fix, a clean
+    # mid-session drop fell through to the same "status: stopped" the menu
+    # bar shows for a normal stop, with no indication tracking was lost.
+    async def fake_run_live(**kwargs):
+        return
+
+    monkeypatch.setattr(gui, "run_live", fake_run_live)
+
+    statuses = []
+    errors = []
+    worker = gui.PipelineWorker(
+        on_event=lambda e: None,
+        on_status=statuses.append,
+        on_error=errors.append,
+    )
+    worker.start(Settings(), dry_run=True)
+    worker._thread.join(timeout=2.0)
+
+    assert errors == ["lost connection to leapd mid-session, see docs/SETUP.md"]
+    assert statuses[-1] == "stopped"
+
+
+def test_worker_reports_nothing_extra_on_a_real_user_requested_stop(monkeypatch):
+    # the counterpart to the test above: cancelling the task (what stop()
+    # does) must NOT trip the new "lost connection" error path.
+    async def fake_run_live(**kwargs):
+        await asyncio.sleep(10)
+
+    monkeypatch.setattr(gui, "run_live", fake_run_live)
+
+    statuses = []
+    errors = []
+    worker = gui.PipelineWorker(
+        on_event=lambda e: None,
+        on_status=statuses.append,
+        on_error=errors.append,
+    )
+    worker.start(Settings(), dry_run=True)
+    time.sleep(0.1)  # let the thread actually start running() before stopping it
+    worker.stop(wait=True)
+
+    assert errors == []
+    assert statuses[-1] == "stopped"
 
 
 class _FakeRunningWorker:
