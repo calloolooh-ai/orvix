@@ -502,6 +502,11 @@ async def run_live(
                     )
                     screen_width, screen_height, screen_origin = changed
                     mapper.update_screen_bounds(screen_width, screen_height, screen_origin)
+                    # desktop.center is where the radial wheel opens; without
+                    # this it keeps using the pre-change center forever, same
+                    # staleness class as the mapper bounds this block already
+                    # refreshes
+                    desktop = fresh
 
             # while the radial menu is up it owns the hand: point at a wedge
             # and pinch/dwell to pick. skip the normal cursor pipeline so we
