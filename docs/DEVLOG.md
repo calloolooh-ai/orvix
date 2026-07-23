@@ -115,3 +115,19 @@ found overlay.py had its own hardcoded `_LABELS` dict for the radial wheel's wed
 a run of a few cycles found `thumbs_up_action`, `preferred_hand`, and `cursor_mode` were the last config fields that could take a bogus value and silently misbehave (never fire, tracking never starts, mode quietly falls back) instead of warning like `pinch_action`/`grab_action`/`radial_actions` already did. all three now get sanitized the same way, with tests. checked the rest of config.py's fields against `_sanitize_settings` after and they're all already covered (numeric ranges clamped, enums validated) -- this vein's actually closed out now.
 
 also added the version number to `orvix status`'s output, it was already showing in the menu bar dropdown but the cli status check was the one place you'd actually go looking for it and it wasn't there.
+
+## stuck mouse button when grab starts mid pinch (cycle 79)
+
+`GestureInterpreter.process_hand()` checked `_grabbing` before `_pinching`, so if a pinch was already held down (`PINCH_DOWN` fired, mouse button physically down) when the hand finished closing into a full fist, grab strength could cross its threshold while pinch strength was still high too, since both curl together as part of a fist. grab took over and returned early without ever firing `PINCH_UP`, leaving the mouse button stuck down for the whole grab-scroll session. same "stuck button" bug family as the radial menu state leak fix, just reachable a different way. fixed by releasing any open pinch before starting a grab, plus a test reproducing the exact event sequence.
+
+## coverage gap: releasing a drag that actually became a drag (cycle 81)
+
+a coverage.py pass found `DRAGGING -> IDLE`'s pinch-release branch had zero test coverage, only the quick-click release path was tested. added a test for releasing after the pinch actually progressed to a full drag.
+
+## orvix --help was cutting off 3 of 7 commands (cycle 83)
+
+`bin/orvix`'s `--help` used `sed -n '3,9p'` to slice the usage comment block out of the script, but the block had grown to 12 lines since that range was written, so `calibrate`, `status`, and `profile` never showed up in the help text. widened the range to `3,12p`.
+
+## more nothing-found cycles (84-86)
+
+reviewed bin/orvix, scripts/build_app.sh, shortcuts.py, overlay.py, displays.py, one_euro_filter.py, README.md's cli section, re-read FEATURE_PLANS.md end to end (all 8 items done or explicitly deferred), checked exception handling in gui.py's PipelineWorker, checked overlay callbacks for main-thread dispatch, scanned for tautological test assertions, re-ran pyflakes, and reviewed the config sanitization chain added over cycles 75-77 for consistency. all clean. genuinely getting hard to find anything new at this point.
