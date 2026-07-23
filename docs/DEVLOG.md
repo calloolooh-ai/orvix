@@ -105,3 +105,7 @@ genuinely scraping the bottom now, most cycles come back with nothing:
 - devlog kept going stale between updates since these small checks aren't happening every single cycle anymore, catching it up again here
 
 ~73 cycles total, 53ish commits. full history in git log if you want the exact diffs.
+
+## overlay wedge labels went stale (cycle 76)
+
+found overlay.py had its own hardcoded `_LABELS` dict for the radial wheel's wedge text, separate from shortcuts.py's `NAMED_SHORTCUT_LABELS`. it never got updated when spotlight/force_quit/lock_screen were added as opt-in shortcuts a while back, so if you put one of those in `radial_actions` (config.py validates it as a legit wedge name) the wheel would just show the raw id like "spotlight" instead of "Spotlight Search" while every other wedge got a real title. made `_LABELS` derive from `NAMED_SHORTCUT_LABELS` instead of duplicating it, plus a test asserting every valid radial action has a label so this can't silently drift again.

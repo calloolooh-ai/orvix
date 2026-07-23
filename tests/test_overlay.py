@@ -25,6 +25,7 @@ from orvix.overlay import (
     DwellRingController,
     OverlayController,
 )
+from orvix.shortcuts import RADIAL_SHORTCUTS
 
 
 # -- availability reflects the real AppKit import state on this machine --
@@ -40,6 +41,15 @@ def test_dwell_ring_has_no_available_property():
     # `available` -- gui.py only ever calls .render() on it. document that
     # so a future refactor notices if this drifts.
     assert not hasattr(DwellRingController(), "available")
+
+
+def test_wedge_labels_cover_every_valid_radial_action():
+    # every shortcuts.RADIAL_SHORTCUTS name (including opt-in ones like
+    # spotlight/force_quit/lock_screen, which config.py's radial_actions
+    # validation accepts) plus "close" needs a real label here, or a wedge
+    # drawn for one falls back to the raw action id instead of a title.
+    for action in (*RADIAL_SHORTCUTS, "close"):
+        assert action in overlay._LABELS
 
 
 # -- OverlayController: hide-before-show is always safe --

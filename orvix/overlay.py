@@ -27,18 +27,13 @@ try:
 except Exception:  # noqa: BLE001 - PyObjC/AppKit missing or broken: run without a visual
     _APPKIT_OK = False
 
+from orvix.shortcuts import NAMED_SHORTCUT_LABELS
 
-# wedge action id -> short label drawn in the hub
-_LABELS = {
-    "mission_control": "Mission Control",
-    "maximize": "Maximize",
-    "app_switcher": "App Switcher",
-    "undo": "Undo",
-    "copy": "Copy",
-    "paste": "Paste",
-    "screenshot": "Screenshot",
-    "close": "Close",
-}
+# wedge action id -> short label drawn in the hub. every shortcuts.py wedge
+# name (including the opt-in ones like spotlight/force_quit/lock_screen,
+# which config.py's radial_actions validation happily accepts) plus "close",
+# which isn't a real Shortcut so it isn't in NAMED_SHORTCUT_LABELS.
+_LABELS = {**NAMED_SHORTCUT_LABELS, "close": "Close"}
 
 _BOX = 460.0  # window / view size in points
 _R_OUT = 214.0
