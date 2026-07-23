@@ -379,7 +379,16 @@ class _TerminalCalibrationView:
 
 
 async def _run_async() -> None:
-    settings = load_config()
+    # gui.py's _load_startup_config and main.py's run_live both wrap this
+    # same call for the same reason: invalid yaml, or valid yaml that isn't
+    # a mapping at the top level, makes load_config() crash before
+    # _sanitize_settings ever runs, so a bad config file must not crash the
+    # calibration flow either, same as everywhere else that loads config.
+    try:
+        settings = load_config()
+    except Exception as exc:  # noqa: BLE001 - a bad config file must not crash calibration
+        print(f"couldn't read your config, falling back to defaults: {exc}")
+        settings = Settings()
 
     print("orvix calibration")
     print("=================")

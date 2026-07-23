@@ -236,3 +236,33 @@ async def test_calibrate_threads_on_sample_through_to_collect_range(monkeypatch)
     )
     assert len(seen) == 150
     assert box.x_max > box.x_min
+
+
+@pytest.mark.asyncio
+async def test_run_async_falls_back_to_defaults_on_a_broken_config(monkeypatch, capsys):
+    """
+    matches gui.py's _load_startup_config and main.py's run_live: a
+    load_config() that raises (invalid yaml, or valid yaml that isn't a
+    mapping at the top level) must not crash the calibration flow before it
+    even asks you to press enter.
+    """
+
+    def _boom():
+        raise ValueError("top-level yaml wasn't a mapping")
+
+    monkeypatch.setattr(calibration, "load_config", _boom)
+    monkeypatch.setattr("builtins.input", lambda *a: "")
+
+    # stop the flow right after the config-loading section runs, with a
+    # distinct exception -- if load_config's ValueError were still
+    # propagating instead of getting caught, this assert would see that
+    # ValueError instead of our sentinel one.
+    async def _stop_here(*a, **kw):
+        raise RuntimeError("stopped early, on purpose")
+
+    monkeypatch.setattr(calibration, "wait_for_hand", _stop_here)
+
+    with pytest.raises(RuntimeError, match="stopped early"):
+        await calibration._run_async()
+
+    assert "falling back to defaults" in capsys.readouterr().out
