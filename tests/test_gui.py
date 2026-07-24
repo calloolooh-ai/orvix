@@ -692,6 +692,42 @@ def test_toggle_running_starts_the_pipeline_normally_when_not_calibrating(isolat
     assert len(fake_worker.start_calls) == 1
 
 
+def test_stopping_the_pipeline_hides_a_stuck_radial_wheel_or_dwell_ring(isolated_app):
+    # run_live's frame loop only calls on_radial(None)/on_dwell(None) on its
+    # own closing frame -- there's no finally around it, so cancelling the
+    # pipeline (Stop, here) while the wheel is open or the ring is mid
+    # countdown skips that frame and the overlay window would otherwise sit
+    # frozen on screen, click-through and all, forever.
+    fake_worker = _FakeRunningWorker()
+    isolated_app.worker = fake_worker
+    overlay_calls = []
+    dwell_calls = []
+    monkeypatch_overlay = isolated_app.overlay.render
+    isolated_app.overlay.render = lambda state: overlay_calls.append(state)
+    isolated_app.dwell_ring.render = lambda progress: dwell_calls.append(progress)
+    try:
+        isolated_app._toggle_running(None)
+    finally:
+        isolated_app.overlay.render = monkeypatch_overlay
+
+    assert overlay_calls == [None]
+    assert dwell_calls == [None]
+
+
+def test_restarting_the_pipeline_hides_a_stuck_radial_wheel_or_dwell_ring(isolated_app):
+    fake_worker = _FakeRunningWorker()
+    isolated_app.worker = fake_worker
+    overlay_calls = []
+    dwell_calls = []
+    isolated_app.overlay.render = lambda state: overlay_calls.append(state)
+    isolated_app.dwell_ring.render = lambda progress: dwell_calls.append(progress)
+
+    isolated_app._make_mode_setter("tilt")(None)
+
+    assert overlay_calls == [None]
+    assert dwell_calls == [None]
+
+
 def test_run_calibration_shows_waiting_for_hand_before_the_blocking_call(isolated_app, monkeypatch):
     # wait_for_hand blocks for up to 30s with no progress callbacks at all,
     # so without an upfront status update the menu bar looks frozen right

@@ -465,9 +465,21 @@ class OrvixApp(rumps.App):
             # matching onboarding.is_first_run's docstring.
             save_config(self.settings)
 
+    def _hide_live_overlays(self) -> None:
+        # run_live's frame loop only ever renders(None) to hide the radial
+        # wheel/dwell ring on its own closing frame -- there's no finally
+        # around the loop, so a cancel (Stop, or any setting change that
+        # restarts the pipeline) landing while the wheel is open or the ring
+        # is mid-countdown skips that frame entirely and leaves the window
+        # frozen on screen, click-through and all, until something else
+        # happens to draw over it. hide both explicitly wherever we stop.
+        self.overlay.render(None)
+        self.dwell_ring.render(None)
+
     def _toggle_running(self, sender: rumps.MenuItem) -> None:
         if self.worker.running:
             self.worker.stop()
+            self._hide_live_overlays()
         else:
             if self._calibrating:
                 # mirrors the guard _calibrate has against starting live
@@ -663,6 +675,7 @@ class OrvixApp(rumps.App):
                 "the running pipeline didn't stop in time, still using the old settings -- try Stop then Start."
             )
             return
+        self._hide_live_overlays()
         self.worker.start(self.settings, dry_run=dry_run)
 
     def _make_profile_load_setter(self, name: str):
