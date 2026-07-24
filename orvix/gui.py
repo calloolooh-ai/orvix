@@ -849,6 +849,24 @@ class OrvixApp(rumps.App):
                 return
 
             self.settings.calibration = box
+
+            # tilt mode needs a neutral "flat" reading same as the terminal
+            # flow does (see calibration.py's _run_async) -- nobody's hand
+            # rests at a true zero, so without this tilt_center_x/z just sit
+            # at their 0.0 default forever for anyone who only ever
+            # calibrates through the menu bar, and tilt mode creeps sideways
+            # on its own the whole time. best-effort: a failure here shouldn't
+            # lose the sweep we already have, so it's caught and skipped same
+            # as the cli does.
+            self._on_main_thread(self._show_measuring_tilt)
+            try:
+                cx, cz = asyncio.run(calibration.collect_neutral_tilt(self.settings.preferred_hand))
+            except (calibration.CalibrationError, LeapConnectionError):
+                pass
+            else:
+                self.settings.tilt_center_x = cx
+                self.settings.tilt_center_z = cz
+
             save_config(self.settings)
 
             self._on_main_thread(self._end_calibration_ui)
@@ -891,6 +909,10 @@ class OrvixApp(rumps.App):
 
     def _show_waiting_for_hand(self) -> None:
         self.status_item.title = "status: waiting for your hand..."
+        self.title = ICON_CALIBRATING
+
+    def _show_measuring_tilt(self) -> None:
+        self.status_item.title = "status: hold your hand flat for tilt calibration..."
         self.title = ICON_CALIBRATING
 
     def _update_calibration_ui(self, fraction: float, n_samples: int) -> None:

@@ -653,6 +653,61 @@ def test_run_calibration_shows_waiting_for_hand_before_the_blocking_call(isolate
     assert seen_status_before_calibrate == ["status: waiting for your hand..."]
 
 
+def test_run_calibration_also_measures_neutral_tilt_on_success(isolated_app, monkeypatch):
+    # tilt mode needs tilt_center_x/z to not be stuck at the 0.0 default, see
+    # calibration.py's collect_neutral_tilt -- the menu bar flow used to only
+    # run the sweep and skip this step entirely, which the terminal flow
+    # always did. this checks the gui flow now captures it too.
+    from orvix.config import CalibrationBox
+
+    box = CalibrationBox(x_min=-100, x_max=100, y_min=50, y_max=250, z_min=-50, z_max=50)
+
+    async def _fake_calibrate(*a, **k):
+        return box
+
+    async def _fake_neutral_tilt(*a, **k):
+        return 0.2, -0.1
+
+    monkeypatch.setattr(gui.calibration, "calibrate", _fake_calibrate)
+    monkeypatch.setattr(gui.calibration, "collect_neutral_tilt", _fake_neutral_tilt)
+    monkeypatch.setattr(gui, "_main_thread_invoker", _SyncMainThreadInvoker())
+    monkeypatch.setattr(gui.rumps, "alert", lambda *a, **k: None)
+
+    isolated_app._run_calibration()
+
+    assert isolated_app.settings.calibration == box
+    assert isolated_app.settings.tilt_center_x == pytest.approx(0.2)
+    assert isolated_app.settings.tilt_center_z == pytest.approx(-0.1)
+    assert isolated_app._test_saved[-1] is isolated_app.settings
+
+
+def test_run_calibration_keeps_the_sweep_if_neutral_tilt_read_fails(isolated_app, monkeypatch):
+    # a flaky read on the tilt step shouldn't throw away a perfectly good
+    # sweep -- same "best effort, don't lose what we already have" reasoning
+    # the terminal flow uses.
+    from orvix.config import CalibrationBox
+
+    box = CalibrationBox(x_min=-100, x_max=100, y_min=50, y_max=250, z_min=-50, z_max=50)
+
+    async def _fake_calibrate(*a, **k):
+        return box
+
+    async def _broken_neutral_tilt(*a, **k):
+        raise gui.calibration.CalibrationError("couldn't get a steady read")
+
+    monkeypatch.setattr(gui.calibration, "calibrate", _fake_calibrate)
+    monkeypatch.setattr(gui.calibration, "collect_neutral_tilt", _broken_neutral_tilt)
+    monkeypatch.setattr(gui, "_main_thread_invoker", _SyncMainThreadInvoker())
+    monkeypatch.setattr(gui.rumps, "alert", lambda *a, **k: None)
+
+    isolated_app._run_calibration()
+
+    assert isolated_app.settings.calibration == box
+    assert isolated_app.settings.tilt_center_x == 0.0
+    assert isolated_app.settings.tilt_center_z == 0.0
+    assert isolated_app._test_saved[-1] is isolated_app.settings
+
+
 def test_run_calibration_clears_the_flag_even_when_calibration_errors(isolated_app, monkeypatch):
     def _broken(*a, **k):
         raise gui.calibration.CalibrationError("sweep too short")
