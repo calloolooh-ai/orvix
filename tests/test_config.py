@@ -185,6 +185,25 @@ def test_load_config_swaps_inverted_calibration_axis(tmp_path):
     assert loaded.calibration.x_max == 150.0
 
 
+def test_load_config_falls_back_when_calibration_axis_is_not_a_number(tmp_path):
+    # unlike the Settings fields walked by _clamp_field, CalibrationBox isn't
+    # covered by any of the _*_FIELDS tuples, so a hand-edited
+    # `calibration: {x_min: "high"}` reached _sanitize_calibration_axis_order's
+    # `lo <= hi` as a raw string and crashed load_config outright instead of
+    # falling back like every other bad value in this file.
+    path = tmp_path / "config.yaml"
+    path.write_text(yaml.safe_dump({"calibration": {"x_min": "high", "y_max": "low"}}))
+
+    loaded = load_config(path)
+
+    default = CalibrationBox()
+    assert loaded.calibration.x_min == default.x_min
+    assert loaded.calibration.y_max == default.y_max
+    # the good side of each pair is untouched
+    assert loaded.calibration.x_max == default.x_max
+    assert loaded.calibration.y_min == default.y_min
+
+
 def test_load_config_fixes_tilt_full_not_above_deadzone(tmp_path):
     # TiltCoordMapper._deflection computes
     # `span = max(1e-6, tilt_full - tilt_deadzone)`, which only guards the
@@ -199,6 +218,18 @@ def test_load_config_fixes_tilt_full_not_above_deadzone(tmp_path):
     loaded = load_config(path)
 
     assert loaded.tilt_full > loaded.tilt_deadzone
+
+
+def test_load_config_falls_back_when_tilt_fields_are_not_numbers(tmp_path):
+    # tilt_full/tilt_deadzone aren't covered by any of the _*_FIELDS tuples
+    # either, so _sanitize_tilt_deadzone_order's `>` comparison crashed
+    # load_config outright on a hand-edited non-numeric value.
+    path = tmp_path / "config.yaml"
+    path.write_text(yaml.safe_dump({"tilt_full": "nope"}))
+
+    loaded = load_config(path)
+
+    assert loaded.tilt_full == Settings().tilt_full
 
 
 def test_load_config_fixes_freeze_threshold_not_lower_than_pinch(tmp_path):

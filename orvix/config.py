@@ -538,6 +538,27 @@ def _sanitize_calibration_axis_order(settings: Settings, min_field: str, max_fie
     """
     lo = getattr(settings.calibration, min_field)
     hi = getattr(settings.calibration, max_field)
+    if not isinstance(lo, (int, float)) or not isinstance(hi, (int, float)):
+        # calibration fields aren't covered by _clamp_field (that only walks
+        # Settings, not the nested CalibrationBox), so a hand-edited
+        # `calibration: {x_min: "high"}` reaches this <= comparison as a raw
+        # string and would otherwise crash load_config outright. fall back to
+        # the dataclass default for whichever side is bad rather than
+        # guessing at a swap.
+        default = CalibrationBox()
+        if not isinstance(lo, (int, float)):
+            logger.warning(
+                "calibration field %r was %r (%s), not a number -- falling back to %r",
+                min_field, lo, type(lo).__name__, getattr(default, min_field),
+            )
+            setattr(settings.calibration, min_field, getattr(default, min_field))
+        if not isinstance(hi, (int, float)):
+            logger.warning(
+                "calibration field %r was %r (%s), not a number -- falling back to %r",
+                max_field, hi, type(hi).__name__, getattr(default, max_field),
+            )
+            setattr(settings.calibration, max_field, getattr(default, max_field))
+        return
     if lo <= hi:
         return
     logger.warning(
@@ -562,6 +583,27 @@ def _sanitize_tilt_deadzone_order(settings: Settings) -> None:
     the deadzone's value is tied to the sensor's real measured noise floor
     (see its own comment above), not an arbitrary choice.
     """
+    if not isinstance(settings.tilt_full, (int, float)) or not isinstance(
+        settings.tilt_deadzone, (int, float)
+    ):
+        # neither field is covered by _UNIT_INTERVAL_FIELDS/etc, so a
+        # hand-edited `tilt_full: "nope"` reaches this > comparison as a raw
+        # string and would otherwise crash load_config outright.
+        default = _field_default("tilt_full")
+        if not isinstance(settings.tilt_full, (int, float)):
+            logger.warning(
+                "config field 'tilt_full' was %r (%s), not a number -- falling back to %r",
+                settings.tilt_full, type(settings.tilt_full).__name__, default,
+            )
+            settings.tilt_full = default
+        default = _field_default("tilt_deadzone")
+        if not isinstance(settings.tilt_deadzone, (int, float)):
+            logger.warning(
+                "config field 'tilt_deadzone' was %r (%s), not a number -- falling back to %r",
+                settings.tilt_deadzone, type(settings.tilt_deadzone).__name__, default,
+            )
+            settings.tilt_deadzone = default
+        return
     if settings.tilt_full > settings.tilt_deadzone:
         return
     fixed = settings.tilt_deadzone + 0.05
