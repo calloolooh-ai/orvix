@@ -32,6 +32,14 @@ logger = logging.getLogger("orvix.leap_client")
 
 LEAP_WS_URL = "ws://localhost:6437/v6.json"
 
+# leapd not running at all fails the TCP connect almost instantly (OSError),
+# but a wedged leapd process can leave its listening socket open while never
+# completing the websocket handshake. without a bound on the handshake
+# itself, that hangs stream_frames forever with zero feedback: the gui just
+# sits on "starting..." and the cli/calibrate/viz tools all hang the same
+# way, since none of them wrap this call with their own timeout.
+CONNECT_TIMEOUT_SECONDS = 5.0
+
 
 def _reject_non_finite(constant: str) -> float:
     # json.loads accepts the non-standard NaN/Infinity/-Infinity literals by
@@ -76,11 +84,20 @@ async def stream_frames(url: str = LEAP_WS_URL) -> AsyncIterator[dict]:
     so callers stay in control of reconnect/backoff behavior.
     """
     try:
-        ws = await websockets.connect(url)
+        ws = await asyncio.wait_for(
+            websockets.connect(url), timeout=CONNECT_TIMEOUT_SECONDS
+        )
     except (OSError, websockets.InvalidHandshake) as exc:
         raise LeapConnectionError(
             f"couldn't connect to leapd at {url}. is leapd running? "
             f"see docs/SETUP.md step 3. original error: {exc}"
+        ) from exc
+    except asyncio.TimeoutError as exc:
+        raise LeapConnectionError(
+            f"leapd at {url} didn't finish the connection handshake within "
+            f"{CONNECT_TIMEOUT_SECONDS:.0f}s. it may be running but wedged, "
+            f"try restarting it: sudo launchctl kickstart -k "
+            f"system/com.leapmotion.leapd"
         ) from exc
 
     heartbeat_task = asyncio.create_task(_send_heartbeat(ws))

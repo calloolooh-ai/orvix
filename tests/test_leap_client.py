@@ -5,16 +5,37 @@ websocket, they just work with plain frame/hand dicts shaped like what
 leapd sends, so no leapd or real Leap Motion hardware needed.
 """
 
+import asyncio
 import json
 
 import pytest
 
+import orvix.leap_client as leap_client
 from orvix.leap_client import (
+    LeapConnectionError,
     _reject_non_finite,
     extended_fingers_for_hand,
     fingertips_for_hand,
     pick_hand,
 )
+
+
+async def test_stream_frames_times_out_instead_of_hanging_forever_on_a_wedged_handshake(
+    monkeypatch,
+):
+    # a leapd process that's wedged can leave its TCP listener open while
+    # never completing the websocket handshake. before this fix,
+    # stream_frames awaited websockets.connect with no bound at all, so this
+    # would have hung the test (and the real app) forever instead of raising.
+    async def _never_finishes(url):
+        await asyncio.sleep(1000)
+
+    monkeypatch.setattr(leap_client.websockets, "connect", _never_finishes)
+    monkeypatch.setattr(leap_client, "CONNECT_TIMEOUT_SECONDS", 0.05)
+
+    with pytest.raises(LeapConnectionError):
+        async for _ in leap_client.stream_frames():
+            pass
 
 
 @pytest.mark.parametrize("literal", ["NaN", "Infinity", "-Infinity"])
