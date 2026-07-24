@@ -205,3 +205,16 @@ def test_calibration_hud_render_none_hides_after_a_show():
     ctl.render({"rect": None, "marker": None, "fraction": 0.0, "n_samples": 0})
     ctl.render(None)
     assert ctl._window.isVisible() is False
+
+
+def test_calibration_hud_has_no_cached_screen_left_on_the_controller():
+    # _show() used to compute the top-of-screen placement once inside
+    # _ensure_window() and never again, so a monitor/lid change mid-sweep
+    # (a calibration run is ~19s, plenty of time) would leave the HUD parked
+    # at the old primary screen's corner -- same bug class already fixed for
+    # OverlayController's screen-height cache. AppKit classes can't have
+    # attributes patched to prove the re-read happens, so this documents that
+    # the stale-cache field is gone rather than merely unused.
+    ctl = CalibrationOverlayController()
+    ctl._ensure_window()
+    assert not hasattr(ctl, "_screen")

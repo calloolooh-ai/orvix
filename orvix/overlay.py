@@ -518,15 +518,18 @@ class CalibrationOverlayController:
         self._window = window
         self._view = view
 
-        # parked top-center of the main screen, out of the way of the menu
-        # bar itself but somewhere you'll glance while sweeping your hand
+    def _show(self, state: dict) -> None:
+        self._ensure_window()
+        # read the main screen fresh on every show rather than once at window
+        # creation: same staleness class as OverlayController._show's screen
+        # height cache and main.py's desktop-bounds cache -- a calibration
+        # sweep runs long enough (SWEEP_SECONDS + NEUTRAL_TILT_SECONDS, ~19s)
+        # that a monitor/lid change partway through would otherwise leave the
+        # HUD parked at the old primary screen's corner instead of the new one.
         screen = AppKit.NSScreen.mainScreen().frame()
         origin_x = screen.origin.x + (screen.size.width - _HUD_W) / 2.0
         origin_y = screen.origin.y + screen.size.height - _HUD_H - 60.0
-        window.setFrameOrigin_((origin_x, origin_y))
-
-    def _show(self, state: dict) -> None:
-        self._ensure_window()
+        self._window.setFrameOrigin_((origin_x, origin_y))
         self._view.set_state(
             state.get("rect"), state.get("marker"), state.get("fraction", 0.0), state.get("n_samples", 0)
         )
