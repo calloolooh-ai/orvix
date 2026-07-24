@@ -768,6 +768,16 @@ def _drop_unknown_keys(raw: dict, cls: type, path: Path) -> dict:
     one step earlier, for bad *keys*. drop what doesn't match and warn,
     rather than taking the whole config (and everything that loads it) down.
     """
+    if not isinstance(raw, dict):
+        # a hand-edited config.yaml with the whole file (or the `calibration`
+        # key) replaced by a list/string/number reaches here as something
+        # with no .items(), which would otherwise crash cls(**raw) below with
+        # a TypeError instead of falling back like every other bad-value case.
+        logger.warning(
+            "%s: expected a mapping for %s but got %r (%s) -- ignoring it",
+            path, cls.__name__, raw, type(raw).__name__,
+        )
+        return {}
     known = {f.name for f in dataclasses.fields(cls)}
     unknown = sorted(set(raw) - known)
     if unknown:
@@ -792,6 +802,16 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> Settings:
 
     with path.open("r") as f:
         raw = yaml.safe_load(f) or {}
+
+    if not isinstance(raw, dict):
+        # the whole file being a list/string/number (e.g. a botched hand edit)
+        # would otherwise crash the `raw.pop(...)` call below with a TypeError
+        # or AttributeError before any sanitizing ever runs.
+        logger.warning(
+            "%s: expected a mapping at the top level but got %r (%s) -- using defaults",
+            path, raw, type(raw).__name__,
+        )
+        return Settings()
 
     calibration_raw = _drop_unknown_keys(raw.pop("calibration", {}) or {}, CalibrationBox, path)
     calibration = CalibrationBox(**calibration_raw)

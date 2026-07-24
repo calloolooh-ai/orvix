@@ -296,6 +296,31 @@ def test_load_config_drops_unrecognized_calibration_key(tmp_path):
     assert loaded.calibration.x_min == 1.0
 
 
+def test_load_config_falls_back_when_calibration_is_not_a_mapping(tmp_path):
+    # a hand-edited `calibration: [1, 2, 3]` or `calibration: nope` used to
+    # crash _drop_unknown_keys with an AttributeError (no .items()) before
+    # CalibrationBox(**calibration_raw) ever ran.
+    path = tmp_path / "config.yaml"
+    path.write_text(yaml.safe_dump({"calibration": [1, 2, 3], "cursor_mode": "relative"}))
+
+    loaded = load_config(path)
+
+    assert loaded.calibration == Settings().calibration
+    assert loaded.cursor_mode == "relative"
+
+
+def test_load_config_falls_back_when_top_level_is_not_a_mapping(tmp_path):
+    # a config.yaml whose entire contents got replaced by a bare list or
+    # string used to crash `raw.pop("calibration", ...)` before any
+    # sanitizing ever ran.
+    path = tmp_path / "config.yaml"
+    path.write_text("- 1\n- 2\n")
+
+    loaded = load_config(path)
+
+    assert loaded == Settings()
+
+
 def test_load_config_falls_back_on_wrong_type_percent(tmp_path):
     path = tmp_path / "config.yaml"
     path.write_text(yaml.safe_dump({"volume_max_percent": [1, 2, 3]}))
