@@ -343,6 +343,29 @@ def test_load_config_leaves_valid_radial_actions_untouched(tmp_path):
     assert loaded.radial_actions == custom
 
 
+def test_load_config_falls_back_when_radial_actions_is_not_a_list(tmp_path):
+    # a hand-edited config.yaml could hold `radial_actions: 5` or a mapping
+    # instead of a list -- `a in _VALID_RADIAL_ACTIONS` used to raise
+    # TypeError (unhashable dict, or a plain non-iterable), crashing
+    # load_config outright instead of falling back like every other bad
+    # value in this file.
+    path = tmp_path / "config.yaml"
+    path.write_text(yaml.safe_dump({"radial_actions": 5}))
+
+    loaded = load_config(path)
+
+    assert loaded.radial_actions == list(Settings().radial_actions)
+
+
+def test_load_config_falls_back_when_radial_actions_has_unhashable_entries(tmp_path):
+    path = tmp_path / "config.yaml"
+    path.write_text(yaml.safe_dump({"radial_actions": [["nested", "list"], {"a": 1}]}))
+
+    loaded = load_config(path)
+
+    assert loaded.radial_actions == list(Settings().radial_actions)
+
+
 def test_load_config_falls_back_to_default_pinch_action_when_invalid(tmp_path):
     path = tmp_path / "config.yaml"
     save_config(Settings(pinch_action="typo_action"), path)
@@ -359,6 +382,18 @@ def test_load_config_falls_back_to_default_grab_action_when_invalid(tmp_path):
     loaded = load_config(path)
 
     assert loaded.grab_action == "scroll"
+
+
+def test_load_config_falls_back_when_gesture_action_is_unhashable(tmp_path):
+    # `pinch_action: [not, a, string]` used to raise TypeError out of
+    # `value in _VALID_GESTURE_ACTIONS` (unhashable list), same class of bug
+    # as the radial_actions one above.
+    path = tmp_path / "config.yaml"
+    path.write_text(yaml.safe_dump({"pinch_action": ["not", "a", "string"]}))
+
+    loaded = load_config(path)
+
+    assert loaded.pinch_action == "click"
 
 
 def test_load_config_leaves_valid_gesture_actions_untouched(tmp_path):
@@ -446,6 +481,15 @@ def test_save_then_load_round_trips_thumbs_up_action(tmp_path):
     assert loaded.thumbs_up_action == "undo"
 
 
+def test_load_config_falls_back_to_confirm_when_thumbs_up_action_is_unhashable(tmp_path):
+    path = tmp_path / "config.yaml"
+    path.write_text(yaml.safe_dump({"thumbs_up_action": ["undo"]}))
+
+    loaded = load_config(path)
+
+    assert loaded.thumbs_up_action == "confirm"
+
+
 def test_load_config_falls_back_to_confirm_when_thumbs_up_action_invalid(tmp_path):
     path = tmp_path / "config.yaml"
     save_config(Settings(thumbs_up_action="typo_action"), path)
@@ -464,6 +508,15 @@ def test_load_config_falls_back_to_right_when_preferred_hand_invalid(tmp_path):
     assert loaded.preferred_hand == "right"
 
 
+def test_load_config_falls_back_when_preferred_hand_is_unhashable(tmp_path):
+    path = tmp_path / "config.yaml"
+    path.write_text(yaml.safe_dump({"preferred_hand": ["left"]}))
+
+    loaded = load_config(path)
+
+    assert loaded.preferred_hand == "right"
+
+
 def test_load_config_keeps_valid_preferred_hand(tmp_path):
     path = tmp_path / "config.yaml"
     save_config(Settings(preferred_hand="first"), path)
@@ -476,6 +529,15 @@ def test_load_config_keeps_valid_preferred_hand(tmp_path):
 def test_load_config_falls_back_to_absolute_when_cursor_mode_invalid(tmp_path):
     path = tmp_path / "config.yaml"
     save_config(Settings(cursor_mode="relatve"), path)
+
+    loaded = load_config(path)
+
+    assert loaded.cursor_mode == "absolute"
+
+
+def test_load_config_falls_back_when_cursor_mode_is_unhashable(tmp_path):
+    path = tmp_path / "config.yaml"
+    path.write_text(yaml.safe_dump({"cursor_mode": ["absolute"]}))
 
     loaded = load_config(path)
 

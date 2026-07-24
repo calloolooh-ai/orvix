@@ -469,10 +469,18 @@ def _sanitize_radial_actions(settings: Settings) -> None:
     result falls back to the full default wedge set instead.
     """
     actions = settings.radial_actions
-    valid = [a for a in actions if a in _VALID_RADIAL_ACTIONS]
+    if not isinstance(actions, list):
+        logger.warning(
+            "config field 'radial_actions' was %r, not a list -- "
+            "falling back to the default wedge set",
+            actions,
+        )
+        settings.radial_actions = list(_DEFAULT_RADIAL_ACTIONS)
+        return
+    valid = [a for a in actions if isinstance(a, str) and a in _VALID_RADIAL_ACTIONS]
     if valid == actions and actions:
         return
-    dropped = [a for a in actions if a not in _VALID_RADIAL_ACTIONS]
+    dropped = [a for a in actions if not (isinstance(a, str) and a in _VALID_RADIAL_ACTIONS)]
     if not valid:
         logger.warning(
             "config field 'radial_actions' had no valid entries (dropped %r) -- "
@@ -601,7 +609,7 @@ def _sanitize_gesture_action(settings: Settings, field: str, default: str) -> No
     before you ever get a terminal to see why.
     """
     value = getattr(settings, field)
-    if value in _VALID_GESTURE_ACTIONS:
+    if isinstance(value, str) and value in _VALID_GESTURE_ACTIONS:
         return
     logger.warning(
         "config field %r was %r, not a valid action -- falling back to %r",
@@ -621,7 +629,7 @@ def _sanitize_thumbs_up_action(settings: Settings) -> None:
     anywhere, same silent-misbehavior reasoning as _sanitize_radial_actions.
     """
     value = settings.thumbs_up_action
-    if value in _NAMED_SHORTCUTS:
+    if isinstance(value, str) and value in _NAMED_SHORTCUTS:
         return
     logger.warning(
         "config field 'thumbs_up_action' was %r, not a known shortcut -- falling back to 'confirm'",
@@ -640,7 +648,7 @@ def _sanitize_preferred_hand(settings: Settings) -> None:
     reasoning as _sanitize_thumbs_up_action.
     """
     value = settings.preferred_hand
-    if value in _VALID_PREFERRED_HANDS:
+    if isinstance(value, str) and value in _VALID_PREFERRED_HANDS:
         return
     logger.warning(
         "config field 'preferred_hand' was %r, not 'left'/'right'/'first' -- "
@@ -662,7 +670,7 @@ def _sanitize_cursor_mode(settings: Settings) -> None:
     only adds the warning, it doesn't change actual runtime behavior.
     """
     value = settings.cursor_mode
-    if value in _VALID_CURSOR_MODES:
+    if isinstance(value, str) and value in _VALID_CURSOR_MODES:
         return
     logger.warning(
         "config field 'cursor_mode' was %r, not 'absolute'/'relative'/'tilt' -- "
