@@ -646,3 +646,11 @@ def test_delete_profile_missing_raises(tmp_path):
 def test_invalid_profile_name_rejected(tmp_path, bad_name):
     with pytest.raises(ValueError):
         save_profile(bad_name, Settings(), tmp_path / "profiles")
+
+
+def test_overlong_profile_name_rejected_before_it_can_crash_the_filesystem(tmp_path):
+    # a name this long still passes the charset check, so without a length
+    # cap it would sail past _validate_profile_name and blow up
+    # tempfile.mkstemp with an uncaught OSError instead of a clean ValueError
+    with pytest.raises(ValueError):
+        save_profile("a" * 200, Settings(), tmp_path / "profiles")

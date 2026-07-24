@@ -55,16 +55,29 @@ DEFAULT_PROFILES_DIR = Path.home() / ".orvix" / "profiles"
 
 _PROFILE_NAME_CHARS = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-")
 
+# generous enough for any real profile name, but well under filesystem
+# filename limits (typically 255 bytes) even after "name.yaml" is appended.
+_PROFILE_NAME_MAX_LEN = 100
+
 
 def _validate_profile_name(name: str) -> None:
     """
     profile names become filenames (name.yaml), so keep them to a safe,
     unambiguous charset instead of trying to sanitize/escape arbitrary path
     input. rejects "", ".", "..", path separators, etc.
+
+    also caps the length: the charset check alone lets an absurdly long but
+    otherwise "valid" name (e.g. a pasted wall of text, or a stuck key)
+    through, and gui.py's _save_profile_as only catches ValueError from this
+    function -- so that name would sail past validation and then blow up
+    save_profile/save_config with an uncaught OSError ("File name too long")
+    from tempfile.mkstemp, crashing the menu bar app instead of showing the
+    same friendly "invalid profile name" alert.
     """
-    if not name or not set(name) <= _PROFILE_NAME_CHARS:
+    if not name or not set(name) <= _PROFILE_NAME_CHARS or len(name) > _PROFILE_NAME_MAX_LEN:
         raise ValueError(
-            f"invalid profile name {name!r}: use only letters, digits, '-' and '_'"
+            f"invalid profile name {name!r}: use only letters, digits, '-' and '_', "
+            f"max {_PROFILE_NAME_MAX_LEN} characters"
         )
 
 
