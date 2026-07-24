@@ -6,6 +6,7 @@ test_radial_dispatch.py -- this fills in the rest of the module's
 non-async, non-hardware-dependent surface.
 """
 
+import asyncio
 import math
 
 import pytest
@@ -226,6 +227,74 @@ async def test_run_live_lets_leap_connection_error_propagate_unconverted(monkeyp
 
     with pytest.raises(LeapConnectionError, match="not running"):
         await run_live(dry_run=True, verbose=False, settings=Settings())
+
+
+@pytest.mark.asyncio
+async def test_run_live_releases_a_stuck_mouse_button_when_cancelled(monkeypatch):
+    """
+    Stop (or any settings change that triggers a restart) cancels run_live's
+    task from outside the frame loop -- it can land on any await point,
+    including mid-drag with a real mouse_down already posted. This must not
+    leave the button stuck down: the same interpreter.reset() release-event
+    machinery already used for the radial-close/hand-loss paths has to run
+    on the way out, before the CancelledError propagates.
+    """
+    import orvix.main as main_module
+
+    mouse_calls: list[str] = []
+
+    class _FakeMouse:
+        def move(self, x, y):
+            pass
+
+        def mouse_down(self):
+            mouse_calls.append("mouse_down")
+
+        def mouse_up(self):
+            mouse_calls.append("mouse_up")
+
+        def drag_to(self, x, y):
+            pass
+
+        def scroll(self, dx, dy):
+            pass
+
+        def right_click(self):
+            pass
+
+        def key_shortcut(self, keycode, mods):
+            pass
+
+        def set_volume_relative(self, delta):
+            pass
+
+    class _FakeInterpreter:
+        def __init__(self, settings):
+            pass
+
+        def process_hand(self, hand, fingertips, extended_fingers):
+            return []
+
+        def reset(self):
+            # stands in for "a pinch was mid-hold when cancellation hit" --
+            # mirrors what the real interpreter.reset() returns in that case
+            return [GestureEvent(GestureType.PINCH_UP)]
+
+    async def _one_frame_then_cancelled():
+        yield {"hands": []}
+        raise asyncio.CancelledError()
+
+    monkeypatch.setattr(main_module, "stream_latest_frames", _one_frame_then_cancelled)
+    monkeypatch.setattr(main_module, "GestureInterpreter", _FakeInterpreter)
+    monkeypatch.setattr(main_module, "DryRunMouseController", _FakeMouse)
+
+    settings = Settings()
+    settings.pinch_action = "click"
+
+    with pytest.raises(asyncio.CancelledError):
+        await run_live(dry_run=True, verbose=False, settings=settings)
+
+    assert "mouse_up" in mouse_calls
 
 
 @pytest.mark.asyncio

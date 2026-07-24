@@ -634,6 +634,17 @@ async def run_live(
     except LeapConnectionError as exc:
         logger.error(str(exc))
         raise
+    except asyncio.CancelledError:
+        # Stop, or any setting change that triggers a restart, cancels this
+        # task from outside the frame loop -- it can land on any await point,
+        # including mid-drag with a real mouse_down already posted. the
+        # radial-close/hand-loss paths above already use interpreter.reset()
+        # to turn a stuck mid-hold into a proper release event; do the same
+        # here before the cancellation propagates, or the physical mouse
+        # button stays stuck down until some unrelated later click fixes it.
+        for stale_event in interpreter.reset():
+            _dispatch(stale_event, mapper, mouse, settings)
+        raise
 
 
 def main() -> None:
