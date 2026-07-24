@@ -5,11 +5,31 @@ websocket, they just work with plain frame/hand dicts shaped like what
 leapd sends, so no leapd or real Leap Motion hardware needed.
 """
 
+import json
+
+import pytest
+
 from orvix.leap_client import (
+    _reject_non_finite,
     extended_fingers_for_hand,
     fingertips_for_hand,
     pick_hand,
 )
+
+
+@pytest.mark.parametrize("literal", ["NaN", "Infinity", "-Infinity"])
+def test_json_loads_with_reject_non_finite_rejects_the_constant(literal):
+    # json.loads accepts these non-standard literals by default, which would
+    # let a corrupted leapd frame poison the One Euro Filter with a NaN that
+    # never recovers. stream_frames passes _reject_non_finite as
+    # parse_constant so these raise instead of silently parsing.
+    with pytest.raises(ValueError):
+        json.loads(f'{{"palmPosition": [{literal}, 1.0, 2.0]}}', parse_constant=_reject_non_finite)
+
+
+def test_json_loads_with_reject_non_finite_still_parses_normal_frames():
+    frame = json.loads('{"palmPosition": [1.0, 2.0, 3.0]}', parse_constant=_reject_non_finite)
+    assert frame == {"palmPosition": [1.0, 2.0, 3.0]}
 
 
 def _hand(hand_id, hand_type):

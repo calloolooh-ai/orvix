@@ -32,6 +32,17 @@ logger = logging.getLogger("orvix.leap_client")
 
 LEAP_WS_URL = "ws://localhost:6437/v6.json"
 
+
+def _reject_non_finite(constant: str) -> float:
+    # json.loads accepts the non-standard NaN/Infinity/-Infinity literals by
+    # default. a corrupted or glitching leapd frame that ever emits one of
+    # these for a coordinate would otherwise parse fine and flow straight
+    # into the One Euro Filter, which has no recovery from a NaN sample: once
+    # x_prev is NaN, every future filtered output is NaN forever, freezing
+    # the cursor until the app is restarted. raising here makes such a frame
+    # get skipped the same way a malformed non-json message already is.
+    raise ValueError(f"non-finite json constant: {constant}")
+
 # leapd doesn't strictly require a heartbeat on modern protocol versions,
 # but older docs mention clients needing to send something periodically or
 # risk being treated as dead. sending a harmless no-op message on an
@@ -81,8 +92,8 @@ async def stream_frames(url: str = LEAP_WS_URL) -> AsyncIterator[dict]:
 
         async for raw_message in ws:
             try:
-                frame = json.loads(raw_message)
-            except json.JSONDecodeError:
+                frame = json.loads(raw_message, parse_constant=_reject_non_finite)
+            except (json.JSONDecodeError, ValueError):
                 logger.warning("got a non-json message from leapd, skipping: %r", raw_message)
                 continue
 
