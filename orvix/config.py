@@ -410,6 +410,16 @@ _RADIAL_DEAD_ZONE_BOUNDS = (0.0, 200.0)
 # instead of just non-negative, same reasoning as the zoom/volume step fields.
 _RADIAL_OPEN_SWEEP_BOUNDS = (10.0, 3600.0)
 _RADIAL_OPEN_MIN_RADIUS_BOUNDS = (1.0, 500.0)
+# dwell_click_radius_mm isn't in any tuple above either. _DwellClicker.feed
+# re-arms the hover timer whenever math.dist(point, anchor) > radius, so a
+# zero or negative value means almost any hand tremor counts as "drifted off"
+# and the dwell timer never accumulates -- hover-to-click silently never
+# fires again, no error, it just stops working. too large a value has the
+# opposite problem: it tolerates so much drift that a click can fire from
+# hand movement that was never meant to be a deliberate hold. floored above
+# zero and capped well under the dwell overlay's own scale, same reasoning as
+# radial_open_min_radius_mm.
+_DWELL_CLICK_RADIUS_BOUNDS = (0.5, 500.0)
 
 
 def _field_default(field: str):
@@ -680,6 +690,7 @@ def _sanitize_settings(settings: Settings) -> Settings:
     _clamp_field(settings, "radial_open_min_radius_mm", *_RADIAL_OPEN_MIN_RADIUS_BOUNDS)
     _clamp_field(settings, "one_euro_min_cutoff", *_MIN_CUTOFF_BOUNDS)
     _clamp_field(settings, "one_euro_beta", 0.0, float("inf"))
+    _clamp_field(settings, "dwell_click_radius_mm", *_DWELL_CLICK_RADIUS_BOUNDS)
     _sanitize_threshold_order(settings, "pinch_threshold", "pinch_release_threshold")
     _sanitize_threshold_order(settings, "grab_threshold", "grab_release_threshold")
     _sanitize_calibration_axis_order(settings, "x_min", "x_max")

@@ -103,6 +103,19 @@ def test_load_config_clamps_radial_open_fields(tmp_path):
     assert loaded.radial_open_min_radius_mm == 1.0
 
 
+def test_load_config_clamps_dwell_click_radius(tmp_path):
+    # _DwellClicker.feed re-arms the hover timer whenever the hand drifts more
+    # than dwell_click_radius_mm from the anchor point. a zero or negative
+    # radius means basically any tremor counts as drifting off, so the dwell
+    # timer never accumulates and hover-to-click silently stops working.
+    path = tmp_path / "config.yaml"
+    save_config(Settings(dwell_click_radius_mm=-5.0), path)
+
+    loaded = load_config(path)
+
+    assert loaded.dwell_click_radius_mm == 0.5
+
+
 def test_load_config_clamps_one_euro_filter_fields(tmp_path):
     # one_euro_filter.py's _smoothing_factor computes r / (r + 1) where
     # r = 2*pi*cutoff*t_e -- a negative enough one_euro_min_cutoff drives
