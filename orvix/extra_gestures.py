@@ -116,6 +116,17 @@ class HandSignals:
 
 # ---- individual detectors ----
 
+#  a corrupted-but-finite leapd frame (garbage hand position, not caught by
+# the NaN/Infinity guard in leap_client.py since it's a perfectly valid
+# number) can make span jump by an enormous amount in one frame. with
+# zoom_step_mm floored at only 0.1mm (see _POSITIVE_STEP_FIELDS), an
+# unclamped jump turns the drain loop below into billions of iterations,
+# hanging the dispatch thread same as the step-of-zero bug did. no real hand
+# closes/opens by more than this in a single frame, so clamp the delta before
+# it ever reaches resid.
+_MAX_ZOOM_DELTA_MM = 200.0
+
+
 class _ZoomDetector:
     def __init__(self, step_mm: float):
         self._step = step_mm
@@ -130,7 +141,9 @@ class _ZoomDetector:
         if self._last is None:
             self._last = span
             return []
-        self._resid += span - self._last
+        delta = span - self._last
+        delta = max(-_MAX_ZOOM_DELTA_MM, min(_MAX_ZOOM_DELTA_MM, delta))
+        self._resid += delta
         self._last = span
         out: list[ExtraAction] = []
         while self._resid >= self._step:

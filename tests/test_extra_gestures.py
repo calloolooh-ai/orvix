@@ -84,6 +84,19 @@ def test_releasing_the_zoom_resets_so_it_doesnt_lurch_on_reopen():
     assert out == []  # no giant jump from the old span
 
 
+def test_a_corrupted_frames_huge_span_jump_does_not_hang_the_drain_loop():
+    # a garbage-but-finite leapd frame (not caught by the NaN/Infinity guard
+    # in leap_client.py) can report a span that's off by many orders of
+    # magnitude. with zoom_step_mm floored at just 0.1mm, an unclamped delta
+    # here used to turn the drain loop into billions of iterations and hang
+    # the dispatch thread. this must return promptly instead.
+    ex = make(zoom_step_mm=0.1)
+    ex.observe(HandSignals(two_hand_pinch_span=100.0), now=0.0)
+    out = ex.observe(HandSignals(two_hand_pinch_span=1e18), now=0.1)
+    assert ExtraAction.ZOOM_IN in out
+    assert len(out) < 10_000  # clamped delta, not the raw (huge) jump
+
+
 # ---- volume ----
 
 def test_twisting_the_fist_changes_volume():
