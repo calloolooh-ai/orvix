@@ -371,6 +371,20 @@ class HandController:
         self._view = view
 
     @python_method
+    def _sync_screen_frame(self) -> None:
+        """
+        this window is only ever sized to mainScreen once, at creation. this
+        viz runs full screen for as long as you leave it open, so a monitor
+        swap or resolution change mid-session would leave it pinned to the
+        old screen's size, same staleness class as the calibration HUD and
+        radial wheel caches.
+        """
+        frame = AppKit.NSScreen.mainScreen().frame()
+        if self._window.frame().size != frame.size or self._window.frame().origin != frame.origin:
+            self._window.setFrame_display_(frame, True)
+            self._view.setFrame_(((0, 0), frame.size))
+
+    @python_method
     def _project_hand(self, hand, size):
         """
         turn one leap-mm hand into a scene dict of Cocoa-px geometry:
@@ -469,6 +483,7 @@ class HandController:
             return
         try:
             self._ensure_window()
+            self._sync_screen_frame()
             self._tick_inner()
         except Exception:  # noqa: BLE001 - visual only, keep the timer alive
             logger.debug("handrender tick failed", exc_info=True)
