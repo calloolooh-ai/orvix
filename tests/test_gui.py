@@ -309,13 +309,15 @@ class _FakeRunningWorker:
     thread for up to 2s (see PipelineWorker.stop) -- that's the whole reason
     these restart paths need a status update before calling it."""
 
-    def __init__(self):
+    def __init__(self, stop_succeeds=True):
         self.running = True
         self.stop_calls = []
         self.start_calls = []
+        self._stop_succeeds = stop_succeeds
 
     def stop(self, wait=False):
         self.stop_calls.append(wait)
+        return self._stop_succeeds
 
     def start(self, settings, dry_run):
         self.start_calls.append((settings, dry_run))
@@ -355,6 +357,23 @@ def test_every_pipeline_restart_path_shows_restarting_status_first(isolated_app,
     assert fake_worker.stop_calls == [True]
     assert len(fake_worker.start_calls) == 1
     assert isolated_app.status_item.title == "status: restarting..."
+
+
+def test_restart_shows_error_instead_of_silently_no_opping_when_stop_times_out(isolated_app, monkeypatch):
+    # stop(wait=True) returning False means the old thread didn't unwind in
+    # time -- start() right after would be a silent no-op (PipelineWorker
+    # refuses to run a second pipeline on top of a live one), leaving the menu
+    # stuck on "restarting..." forever while the stale pipeline kept running
+    # on the old settings. this must surface an error instead.
+    fake_worker = _FakeRunningWorker(stop_succeeds=False)
+    isolated_app.worker = fake_worker
+    monkeypatch.setattr(gui.rumps, "alert", lambda *a, **k: 1)
+
+    isolated_app._make_mode_setter("tilt")(None)
+
+    assert fake_worker.stop_calls == [True]
+    assert fake_worker.start_calls == []
+    assert isolated_app.status_item.title == "status: error"
 
 
 def test_quit_waits_for_the_pipeline_to_stop_before_quitting_the_app(isolated_app, monkeypatch):

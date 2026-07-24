@@ -167,9 +167,14 @@ class PipelineWorker:
         )
         self._thread.start()
 
-    def stop(self, wait: bool = False) -> None:
+    def stop(self, wait: bool = False) -> bool:
+        """returns whether the worker is confirmed stopped. with wait=True
+        this can be False if the old thread didn't unwind within the
+        timeout -- callers that need a clean restart must check this rather
+        than assuming start() right after stop() always takes effect, since
+        start() is a no-op while the old thread is still alive."""
         if not self.running or self._loop is None or self._task is None:
-            return
+            return True
         loop, task = self._loop, self._task
         loop.call_soon_threadsafe(task.cancel)
         if wait and self._thread is not None:
@@ -177,6 +182,8 @@ class PipelineWorker:
             # start a new one, or two pipelines briefly both drive the cursor.
             # the timeout is so a wedged thread can't freeze the menu bar.
             self._thread.join(timeout=2.0)
+            return not self._thread.is_alive()
+        return not wait
 
     def _run_thread(self, settings: Settings, dry_run: bool) -> None:
         loop = asyncio.new_event_loop()
@@ -637,7 +644,16 @@ class OrvixApp(rumps.App):
             return
         dry_run = bool(self.dry_run.state)
         self.status_item.title = "status: restarting..."
-        self.worker.stop(wait=True)
+        if not self.worker.stop(wait=True):
+            # the old thread didn't unwind within the timeout, so start()
+            # below would just be a silent no-op (it refuses to run a
+            # second pipeline on top of one that's still alive). without
+            # this check the menu would sit on "restarting..." forever
+            # while the stale pipeline kept running on the old settings.
+            self._show_error(
+                "the running pipeline didn't stop in time, still using the old settings -- try Stop then Start."
+            )
+            return
         self.worker.start(self.settings, dry_run=dry_run)
 
     def _make_profile_load_setter(self, name: str):
