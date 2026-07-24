@@ -38,6 +38,41 @@ async def test_stream_frames_times_out_instead_of_hanging_forever_on_a_wedged_ha
             pass
 
 
+async def test_stream_frames_times_out_instead_of_hanging_forever_when_leapd_goes_quiet(
+    monkeypatch,
+):
+    # a leapd process can finish the handshake fine and then go quiet mid
+    # session -- socket still open, still answering pings, just never
+    # sending another frame. before this fix, the plain `async for ... in
+    # ws` loop had no bound on individual recv()s, so this would have hung
+    # forever instead of raising.
+    class _FakeWs:
+        async def send(self, _message):
+            return None
+
+        async def recv(self):
+            await asyncio.sleep(1000)
+
+        async def close(self):
+            return None
+
+        def __aiter__(self):
+            return self
+
+        async def __anext__(self):
+            return await self.recv()
+
+    async def _connect(url):
+        return _FakeWs()
+
+    monkeypatch.setattr(leap_client.websockets, "connect", _connect)
+    monkeypatch.setattr(leap_client, "FRAME_IDLE_TIMEOUT_SECONDS", 0.05)
+
+    with pytest.raises(LeapConnectionError, match="stopped sending frames"):
+        async for _ in leap_client.stream_frames():
+            pass
+
+
 @pytest.mark.parametrize("literal", ["NaN", "Infinity", "-Infinity"])
 def test_json_loads_with_reject_non_finite_rejects_the_constant(literal):
     # json.loads accepts these non-standard literals by default, which would

@@ -40,6 +40,15 @@ LEAP_WS_URL = "ws://localhost:6437/v6.json"
 # way, since none of them wrap this call with their own timeout.
 CONNECT_TIMEOUT_SECONDS = 5.0
 
+# leapd streams frames continuously at 75+ fps once connected, even with no
+# hand in view (an empty-hands frame still arrives every tick). a leapd
+# process that's gone quiet mid-session -- socket still open, still
+# answering the websockets library's own ping/pong keepalive so it never
+# looks disconnected, but no longer producing frames -- would otherwise hang
+# the plain `async for raw_message in ws` loop forever, same failure shape
+# as the connect-handshake hang above, just further downstream.
+FRAME_IDLE_TIMEOUT_SECONDS = 5.0
+
 
 def _reject_non_finite(constant: str) -> float:
     # json.loads accepts the non-standard NaN/Infinity/-Infinity literals by
@@ -78,10 +87,12 @@ async def stream_frames(url: str = LEAP_WS_URL) -> AsyncIterator[dict]:
     connect to leapd and yield parsed frame dicts forever, one per message.
 
     raises LeapConnectionError if the initial connection fails (most likely
-    cause: leapd isn't running, see docs/SETUP.md step 3). if the connection
-    drops mid-stream after connecting successfully, this just returns and
-    lets the caller decide whether to reconnect, we don't retry internally
-    so callers stay in control of reconnect/backoff behavior.
+    cause: leapd isn't running, see docs/SETUP.md step 3), or if leapd goes
+    quiet for FRAME_IDLE_TIMEOUT_SECONDS without sending a frame (most likely
+    cause: leapd wedged mid-session). if the connection instead closes
+    cleanly mid-stream, this just returns and lets the caller decide whether
+    to reconnect, we don't retry internally so callers stay in control of
+    reconnect/backoff behavior.
     """
     try:
         ws = await asyncio.wait_for(
@@ -107,7 +118,21 @@ async def stream_frames(url: str = LEAP_WS_URL) -> AsyncIterator[dict]:
         # app has leapd's "focus", see the protocol notes up top
         await ws.send(json.dumps({"background": True}))
 
-        async for raw_message in ws:
+        while True:
+            try:
+                raw_message = await asyncio.wait_for(
+                    ws.recv(), timeout=FRAME_IDLE_TIMEOUT_SECONDS
+                )
+            except asyncio.TimeoutError as exc:
+                raise LeapConnectionError(
+                    f"leapd at {url} stopped sending frames for "
+                    f"{FRAME_IDLE_TIMEOUT_SECONDS:.0f}s, it may have wedged. "
+                    f"try restarting it: sudo launchctl kickstart -k "
+                    f"system/com.leapmotion.leapd"
+                ) from exc
+            except websockets.ConnectionClosed:
+                return
+
             try:
                 frame = json.loads(raw_message, parse_constant=_reject_non_finite)
             except (json.JSONDecodeError, ValueError):
