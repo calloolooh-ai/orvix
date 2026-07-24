@@ -455,6 +455,15 @@ class OrvixApp(rumps.App):
         )
         if choice == 1:
             self._calibrate(None)
+        else:
+            # skip for now still needs to leave evidence of this run behind,
+            # or is_first_run sees no config.yaml and no profile next launch
+            # and shows this exact same alert again -- forever, for anyone
+            # who skips and never happens to touch a menu setting or
+            # calibrate in between. saving current (default) settings here
+            # is what actually makes "skip for now" mean "don't ask again",
+            # matching onboarding.is_first_run's docstring.
+            save_config(self.settings)
 
     def _toggle_running(self, sender: rumps.MenuItem) -> None:
         if self.worker.running:

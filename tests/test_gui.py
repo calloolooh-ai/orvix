@@ -620,6 +620,46 @@ def test_calibrate_starts_when_not_already_calibrating(isolated_app, monkeypatch
     assert isolated_app._calibrating is True
 
 
+def test_skipping_onboarding_saves_settings_so_the_welcome_alert_does_not_come_back(isolated_app, monkeypatch):
+    # "skip for now" used to leave config.yaml untouched, so is_first_run
+    # (no config.yaml, no profiles) stayed true and the exact same welcome
+    # alert reappeared on every later launch until the user happened to
+    # calibrate or touch some other setting -- not what "skip for now" is
+    # supposed to mean, per onboarding.is_first_run's own docstring.
+    monkeypatch.setattr(gui.rumps, "alert", lambda *a, **k: 2)  # cancel/skip
+    isolated_app._is_first_run = True
+    isolated_app._test_saved.clear()
+
+    isolated_app._maybe_show_onboarding()
+
+    assert isolated_app._test_saved == [isolated_app.settings]
+
+
+def test_calibrating_from_onboarding_does_not_also_save_settings_directly(isolated_app, monkeypatch):
+    monkeypatch.setattr(gui.rumps, "alert", lambda *a, **k: 1)  # calibrate now
+    started = []
+    monkeypatch.setattr(gui.threading, "Thread", lambda *a, **k: started.append(k) or _NoopThread())
+    isolated_app._is_first_run = True
+    isolated_app._test_saved.clear()
+
+    isolated_app._maybe_show_onboarding()
+
+    assert len(started) == 1
+    assert isolated_app._test_saved == []
+
+
+def test_onboarding_alert_is_skipped_entirely_on_a_later_run(isolated_app, monkeypatch):
+    alerts = []
+    monkeypatch.setattr(gui.rumps, "alert", lambda *a, **k: alerts.append(a) or 2)
+    isolated_app._is_first_run = False
+    isolated_app._test_saved.clear()
+
+    isolated_app._maybe_show_onboarding()
+
+    assert alerts == []
+    assert isolated_app._test_saved == []
+
+
 def test_toggle_running_refuses_to_start_the_pipeline_while_calibrating(isolated_app, monkeypatch):
     # the reverse of test_calibrate_refuses_a_second_run_while_one_is_in_progress:
     # starting the live pipeline mid-calibration would have both threads
