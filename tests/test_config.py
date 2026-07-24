@@ -19,6 +19,15 @@ from orvix.config import (
 )
 
 
+def test_save_config_writes_atomically_no_leftover_tmp_file(tmp_path):
+    path = tmp_path / "config.yaml"
+    save_config(Settings(pinch_threshold=0.6), path)
+
+    assert load_config(path).pinch_threshold == 0.6
+    leftover = [p for p in tmp_path.iterdir() if p != path]
+    assert leftover == []
+
+
 def test_load_config_clamps_out_of_range_thresholds(tmp_path):
     path = tmp_path / "config.yaml"
     save_config(Settings(pinch_threshold=1.5, grab_release_threshold=-0.2), path)

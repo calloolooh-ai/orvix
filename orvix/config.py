@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import dataclasses
 import logging
+import os
+import tempfile
 from pathlib import Path
 
 import yaml
@@ -748,12 +750,34 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> Settings:
 
 
 def save_config(settings: Settings, path: Path = DEFAULT_CONFIG_PATH) -> None:
-    """write settings out to yaml, creating the parent dir if needed."""
+    """
+    write settings out to yaml, creating the parent dir if needed.
+
+    writes to a temp file in the same directory first and os.replace()s it
+    over the real path, rather than writing straight into it. a direct write
+    that gets interrupted (crash, force quit, power loss) mid-yaml-dump
+    leaves a truncated/invalid config.yaml behind, and every setter in gui.py
+    calls save_config on basically every settings change -- that's a lot of
+    windows for a bad-timed interruption to land in. load_config()'s callers
+    already fall back to defaults for a broken file, but that means losing
+    every saved setting, not just the one write that got cut off. os.replace
+    is atomic on the same filesystem, so a reader never sees a half-written
+    file, only the old one or the new one.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
 
     data = dataclasses.asdict(settings)
-    with path.open("w") as f:
-        yaml.safe_dump(data, f, default_flow_style=False, sort_keys=False)
+    fd, tmp_name = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w") as f:
+            yaml.safe_dump(data, f, default_flow_style=False, sort_keys=False)
+        os.replace(tmp_name, path)
+    except BaseException:
+        try:
+            os.unlink(tmp_name)
+        except OSError:
+            pass
+        raise
 
 
 def list_profiles(profiles_dir: Path = DEFAULT_PROFILES_DIR) -> list[str]:
